@@ -1,0 +1,32 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.authorizeRole = exports.authenticate = void 0;
+const jwt_1 = require("../utils/jwt");
+const authenticate = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return; // Ensure function execution stops
+    }
+    const token = authHeader.split(' ')[1];
+    try {
+        const payload = (0, jwt_1.verifyAccessToken)(token);
+        req.user = payload;
+        next();
+    }
+    catch (error) {
+        res.status(401).json({ message: 'Invalid or expired token' });
+        return; // Ensure function execution stops
+    }
+};
+exports.authenticate = authenticate;
+const authorizeRole = (role) => {
+    return (req, res, next) => {
+        if (!req.user || req.user.role !== role) {
+            res.status(403).json({ message: 'Forbidden' });
+            return; // Ensure function execution stops
+        }
+        next();
+    };
+};
+exports.authorizeRole = authorizeRole;

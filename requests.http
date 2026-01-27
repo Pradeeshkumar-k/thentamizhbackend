@@ -1,0 +1,94 @@
+@baseUrl = http://localhost:5000/api
+
+### Auth - Register Admin
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "password123",
+  "role": "ADMIN"
+}
+
+### Auth - Login Admin
+# @name loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "password123"
+}
+
+@adminToken = {{loginAdmin.response.body.accessToken}}
+
+### Auth - Register User
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "password123",
+  "role": "USER"
+}
+
+### Auth - Login User
+# @name loginUser
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "password123"
+}
+
+@userToken = {{loginUser.response.body.accessToken}}
+
+### Novels - Create (Admin)
+POST {{baseUrl}}/novels
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "title": "The Great Adventure",
+  "description": "An epic journey.",
+  "genre": "Fantasy",
+  "status": "PUBLISHED"
+}
+
+### Novels - List (Public)
+GET {{baseUrl}}/novels
+
+### Novels - Get Details
+@novelId = [REPLACE_WITH_NOVEL_ID]
+GET {{baseUrl}}/novels/{{novelId}}
+
+### Chapters - Create (Admin)
+POST {{baseUrl}}/chapters
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "novelId": "{{novelId}}",
+  "title": "Chapter 1: The Beginning",
+  "content": "Once upon a time...",
+  "order": 1
+}
+
+### Chapters - Get (Public)
+@chapterId = [REPLACE_WITH_CHAPTER_ID]
+GET {{baseUrl}}/chapters/{{chapterId}}
+
+### Chapters - Like (User)
+POST {{baseUrl}}/chapters/{{chapterId}}/like
+Authorization: Bearer {{userToken}}
+
+### Comments - Add (User)
+POST {{baseUrl}}/comments
+Content-Type: application/json
+Authorization: Bearer {{userToken}}
+
+{
+  "chapterId": "{{chapterId}}",
+  "text": "Great chapter!"
+}

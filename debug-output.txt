@@ -1,0 +1,11 @@
+Starting Debug
+Checking API at http://localhost:5000/api...
+Found Novel: 15720e6b-bb02-4bdb-9a2a-3d187f2c62e2 - demo2
+Found Chapter: 6bb842f0-3056-4eeb-8907-90f33390dfe4 - demo
+Calling Translation API: http://localhost:5000/api/novels/15720e6b-bb02-4bdb-9a2a-3d187f2c62e2/chapters/6bb842f0-3056-4eeb-8907-90f33390dfe4?lang=english
+API Response Status: 200
+API Response TitleEn: demo
+API Response ContentEn Length: 1071
+API Response Content Sample: Shadow and light 
+
+The small town was still sleepi...
