@@ -167,7 +167,7 @@ const NOVEL_CACHE_TTL = 60 * 60 * 1000; // 1 Hour TTL
 
 // Public: Get novel by ID
 export const getNovelById = async (req: Request, res: Response): Promise<void> => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   const { lang } = req.query; // Support lang=english query param
   
   // Cache Key includes Lang to cache translations separately
@@ -412,7 +412,7 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
 
 // Admin: Update novel
 export const updateNovel = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   // Destructure all possible fields from frontend
   const { 
       title, 
@@ -469,7 +469,7 @@ export const updateNovel = async (req: Request, res: Response) => {
 
 // Admin: Delete novel
 export const deleteNovel = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   try {
     const existing = await prisma.novel.findUnique({ where: { id } });
     if (!existing) {
@@ -491,7 +491,7 @@ export const deleteNovel = async (req: Request, res: Response) => {
 // Public: Get chapters for a novel
 export const getChaptersByNovel = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = req.params; // Expecting novelId as :id for consistency with other public routes or :novelId
+    const id = String(req.params.id); // Expecting novelId as :id for consistency with other public routes or :novelId
 
     const chapters = await prisma.chapter.findMany({
       where: { novelId: id },
