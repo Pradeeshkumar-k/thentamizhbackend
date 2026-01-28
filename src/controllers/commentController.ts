@@ -31,7 +31,7 @@ export const addComment = async (req: AuthRequest, res: Response): Promise<void>
 
 // Admin/Owner: Delete comment
 export const deleteComment = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params;
+  const { id } = req.params as { id: string };
   const userId = req.user?.userId;
   const role = req.user?.role;
 

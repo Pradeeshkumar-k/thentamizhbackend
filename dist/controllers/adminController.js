@@ -6,6 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.translateContent = exports.markAllNotificationsAsRead = exports.markNotificationAsRead = exports.getAllNotifications = exports.deleteChapter = exports.updateChapter = exports.createChapter = exports.getChapterById = exports.getChaptersByNovel = exports.deleteNovel = exports.updateNovel = exports.createNovel = exports.getNovelByIdAdmin = exports.getAllNovelsAdmin = exports.getDashboardStats = void 0;
 const prisma_1 = __importDefault(require("../utils/prisma"));
 const translationService_1 = require("../services/translationService");
+// Import Cache Invalidation
+const novelController_1 = require("./novelController");
 // ============================================
 // DASHBOARD STATS
 // ============================================
@@ -31,7 +33,7 @@ const getDashboardStats = async (req, res) => {
                 }
             }
         });
-        const recentActivity = recentNovels.map(novel => ({
+        const recentActivity = recentNovels.map((novel) => ({
             id: novel.id,
             action: `New novel "${novel.title}" by ${novel.author.name}`,
             timestamp: novel.createdAt.toISOString()
@@ -94,7 +96,7 @@ const getAllNovelsAdmin = async (req, res) => {
             }),
             prisma_1.default.novel.count({ where })
         ]);
-        const formattedNovels = novels.map(novel => ({
+        const formattedNovels = novels.map((novel) => ({
             id: novel.id,
             title: novel.title,
             author_name: novel.author.name,
@@ -183,6 +185,8 @@ const createNovel = async (req, res) => {
                 authorId
             }
         });
+        // Invalidate Cache
+        (0, novelController_1.invalidateNovelCache)();
         res.status(201).json({
             success: true,
             data: novel,
@@ -227,6 +231,8 @@ const updateNovel = async (req, res) => {
             });
             console.log(`Updated cover image for all chapters of novel ${id}`);
         }
+        // Invalidate Cache
+        (0, novelController_1.invalidateNovelCache)();
         res.json({
             success: true,
             data: novel,
@@ -245,6 +251,8 @@ const deleteNovel = async (req, res) => {
         await prisma_1.default.novel.delete({
             where: { id }
         });
+        // Invalidate Cache
+        (0, novelController_1.invalidateNovelCache)();
         res.json({
             success: true,
             message: 'Novel deleted successfully'
@@ -268,7 +276,7 @@ const getChaptersByNovel = async (req, res) => {
         res.json({
             success: true,
             data: {
-                chapters: chapters.map(ch => ({
+                chapters: chapters.map((ch) => ({
                     id: ch.id,
                     novel_id: ch.novelId,
                     chapter_number: ch.order,

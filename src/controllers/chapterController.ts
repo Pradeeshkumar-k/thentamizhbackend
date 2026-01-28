@@ -5,7 +5,7 @@ import { TranslationService } from '../services/translationService';
 
 // Public: Get chapter content
 export const getChapterById = async (req: Request, res: Response): Promise<void> => {
-  const { id } = req.params;
+  const { id } = req.params as { id: string };
   const { lang } = req.query; // Check for language query param
   console.log(`[getChapterById] ID: ${id}, Lang: ${lang}`);
 
@@ -29,7 +29,7 @@ export const getChapterById = async (req: Request, res: Response): Promise<void>
        prisma.chapter.update({
           where: { id },
           data: { views: { increment: 1 } }
-       }).catch(e => console.error("Async View Inc Failed", e));
+       }).catch((e: any) => console.error("Async View Inc Failed", e));
        
        res.json(cached.data);
        return;
@@ -149,7 +149,7 @@ export const getChapterById = async (req: Request, res: Response): Promise<void>
     prisma.chapter.update({
       where: { id },
       data: { views: { increment: 1 } }
-    }).catch(err => console.error('Error incrementing chapter views:', err));
+    }).catch((err: any) => console.error('Error incrementing chapter views:', err));
 
     // Map to frontend expected format
     const formattedChapter = {
@@ -195,7 +195,7 @@ export const createChapter = async (req: Request, res: Response): Promise<void> 
 
 // Admin: Update chapter
 export const updateChapter = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const { id } = req.params as { id: string };
   const { title, content, order, thumbnailUrl } = req.body;
   try {
     const existing = await prisma.chapter.findUnique({ where: { id } });
@@ -216,7 +216,7 @@ export const updateChapter = async (req: Request, res: Response) => {
 
 // Admin: Delete chapter
 export const deleteChapter = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const { id } = req.params as { id: string };
   try {
     const existing = await prisma.chapter.findUnique({ where: { id } });
     if (!existing) {
@@ -233,7 +233,7 @@ export const deleteChapter = async (req: Request, res: Response) => {
 
 // User: Like chapter
 export const likeChapter = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params;
+  const { id } = req.params as { id: string };
   const userId = req.user?.userId;
 
   if (!userId) {
@@ -256,7 +256,7 @@ export const likeChapter = async (req: AuthRequest, res: Response): Promise<void
 
 // User: Unlike chapter
 export const unlikeChapter = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params;
+  const { id } = req.params as { id: string };
   const userId = req.user?.userId;
 
   if (!userId) {

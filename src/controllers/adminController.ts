@@ -34,7 +34,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
       }
     });
 
-    const recentActivity = recentNovels.map(novel => ({
+    const recentActivity = recentNovels.map((novel: any) => ({
       id: novel.id,
       action: `New novel "${novel.title}" by ${novel.author.name}`,
       timestamp: novel.createdAt.toISOString()
@@ -104,7 +104,7 @@ export const getAllNovelsAdmin = async (req: AuthRequest, res: Response): Promis
       prisma.novel.count({ where })
     ]);
 
-    const formattedNovels = novels.map(novel => ({
+    const formattedNovels = novels.map((novel: any) => ({
       id: novel.id,
       title: novel.title,
       author_name: novel.author.name,
@@ -133,7 +133,7 @@ export const getAllNovelsAdmin = async (req: AuthRequest, res: Response): Promis
 
 export const getNovelByIdAdmin = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
 
     const novel = await prisma.novel.findUnique({
       where: { id },
@@ -215,7 +215,7 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
 
 export const updateNovel = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const { title, description, novel_summary, genre, categories, status, cover_image, coverImageUrl } = req.body;
 
     // Map frontend fields to backend schema
@@ -262,7 +262,7 @@ export const updateNovel = async (req: AuthRequest, res: Response): Promise<void
 
 export const deleteNovel = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
 
     await prisma.novel.delete({
       where: { id }
@@ -286,7 +286,7 @@ export const deleteNovel = async (req: AuthRequest, res: Response): Promise<void
 
 export const getChaptersByNovel = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { novelId } = req.params;
+    const { novelId } = req.params as { novelId: string };
 
     const chapters = await prisma.chapter.findMany({
       where: { novelId },
@@ -296,7 +296,7 @@ export const getChaptersByNovel = async (req: AuthRequest, res: Response): Promi
     res.json({
       success: true,
       data: {
-        chapters: chapters.map(ch => ({
+        chapters: chapters.map((ch: any) => ({
           id: ch.id,
           novel_id: ch.novelId,
           chapter_number: ch.order,
@@ -316,7 +316,7 @@ export const getChaptersByNovel = async (req: AuthRequest, res: Response): Promi
 
 export const getChapterById = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
 
     const chapter = await prisma.chapter.findUnique({
       where: { id }
@@ -347,7 +347,7 @@ export const getChapterById = async (req: AuthRequest, res: Response): Promise<v
 
 export const createChapter = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { novelId } = req.params;
+    const { novelId } = req.params as { novelId: string };
     const { title, name, content, chapter_number, order, thumbnail, thumbnailUrl } = req.body;
 
     // Map frontend fields (chapter_number, thumbnail, title/name)
@@ -378,7 +378,7 @@ export const createChapter = async (req: AuthRequest, res: Response): Promise<vo
 
 export const updateChapter = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const { title, name, content, chapter_number, order, thumbnail, thumbnailUrl } = req.body;
 
     // Map frontend fields
@@ -411,7 +411,7 @@ export const updateChapter = async (req: AuthRequest, res: Response): Promise<vo
 
 export const deleteChapter = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
 
     await prisma.chapter.delete({
       where: { id }
@@ -459,7 +459,7 @@ export const getAllNotifications = async (req: AuthRequest, res: Response): Prom
 
 export const markNotificationAsRead = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     
     // Mock implementation
     res.json({

@@ -29,7 +29,7 @@ const getChapterById = async (req, res) => {
             prisma_1.default.chapter.update({
                 where: { id },
                 data: { views: { increment: 1 } }
-            }).catch(e => console.error("Async View Inc Failed", e));
+            }).catch((e) => console.error("Async View Inc Failed", e));
             res.json(cached.data);
             return;
         }
@@ -132,7 +132,7 @@ const getChapterById = async (req, res) => {
         prisma_1.default.chapter.update({
             where: { id },
             data: { views: { increment: 1 } }
-        }).catch(err => console.error('Error incrementing chapter views:', err));
+        }).catch((err) => console.error('Error incrementing chapter views:', err));
         // Map to frontend expected format
         const formattedChapter = {
             ...chapter,

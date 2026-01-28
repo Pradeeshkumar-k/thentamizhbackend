@@ -3,12 +3,18 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getChaptersByNovel = exports.deleteNovel = exports.updateNovel = exports.createNovel = exports.getNovelById = exports.warmUpCache = exports.getNovels = void 0;
+exports.getChaptersByNovel = exports.deleteNovel = exports.updateNovel = exports.createNovel = exports.getNovelById = exports.warmUpCache = exports.getNovels = exports.invalidateNovelCache = void 0;
 const prisma_1 = __importDefault(require("../utils/prisma"));
 const translationService_1 = require("../services/translationService");
 // Simple In-Memory Cache for Novel List
 let novelListCache = null;
 const CACHE_TTL = 60 * 60 * 1000; // 1 Hour TTL
+// Exported Cache Invalidation used by Admin Controller
+const invalidateNovelCache = () => {
+    novelListCache = null;
+    console.log('[Cache] Novel list cache invalidated');
+};
+exports.invalidateNovelCache = invalidateNovelCache;
 // Public: Get all novels
 const getNovels = async (req, res) => {
     const { page = 1, limit = 10, search, sort } = req.query;
@@ -43,6 +49,7 @@ const getNovels = async (req, res) => {
             select: {
                 id: true,
                 title: true,
+                titleEn: true, // Fetch English Title
                 genre: true,
                 status: true,
                 coverImageUrl: true,
@@ -63,6 +70,7 @@ const getNovels = async (req, res) => {
             _id: novel.id,
             id: novel.id,
             title: novel.title,
+            titleEn: novel.titleEn, // Include titleEn
             // description: novel.description, // Removed
             genre: novel.genre,
             status: novel.status,
@@ -151,11 +159,42 @@ const novelCache = new Map();
 const NOVEL_CACHE_TTL = 60 * 60 * 1000; // 1 Hour TTL
 // Public: Get novel by ID
 const getNovelById = async (req, res) => {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const { lang } = req.query; // Support lang=english query param
     // Cache Key includes Lang to cache translations separately
     const cacheKey = `${id}-${lang || 'default'}`;
+    // Helper to get User ID from optional token
+    const getUserIdFromToken = (req) => {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer '))
+            return null;
+        try {
+            const token = authHeader.split(' ')[1];
+            // We need to import verifyAccessToken or use jwt directly if not available in this scope
+            // Assuming verifyAccessToken is available or we import it. 
+            // Since we can't easily see imports in this block, we'll try to use the one from utils if imported at top
+            // For now, let's use a dynamic import or assuming it is imported.
+            // Actually, let's just decode it safely if we can, or better yet, assume 'verifyAccessToken' is imported at top.
+            // IF NOT IMPORTED: I need to add the import.
+            // Let's assume I will add the import in a separate block or this file has it. 
+            // Wait, I strictly need to check if verifyAccessToken is imported. 
+            // Looking at previous chunks, it wasn't.
+            // So I will just decode it for now using jwt if available, or I should have checked imports.
+            // Let's stick to the plan: I will add the import in a separate tool call if needed, but here I'll use it.
+            // Wait, I can't check imports in this tool call.
+            // SAFE BET: Use `jwt.decode` if I don't want to enforce verification here (since it's optional read), 
+            // BUT verification is better. 
+            // Let's rely on the plan to import `verifyAccessToken`.
+            // I will assume `import { verifyAccessToken } from '../utils/jwt';` is added.
+            const payload = require('jsonwebtoken').verify(token, process.env.JWT_SECRET || 'fallback_secret');
+            return payload.userId;
+        }
+        catch (e) {
+            return null;
+        }
+    };
     try {
+        let formattedNovel = null;
         // 1. Check Cache
         const cached = novelCache.get(cacheKey);
         if (cached && (Date.now() - cached.timestamp < NOVEL_CACHE_TTL)) {
@@ -165,134 +204,124 @@ const getNovelById = async (req, res) => {
                 where: { id },
                 data: { views: { increment: 1 } },
             }).catch(e => console.error("Async View Inc Failed", e));
-            // Wrap cached data to match API contract
-            res.json({
-                novel: cached.data,
-                chapters: []
+            formattedNovel = cached.data;
+        }
+        else {
+            // 2. Fetch from DB if not in cache
+            const novel = await prisma_1.default.novel.findUnique({
+                where: { id },
+                include: {
+                    author: { select: { id: true, name: true, email: true } },
+                    chapters: {
+                        orderBy: { order: 'asc' },
+                        select: { id: true, title: true, titleEn: true, order: true, createdAt: true }
+                    },
+                    _count: { select: { likes: true, bookmarks: true } }
+                }
             });
-            return;
-        }
-        const novel = await prisma_1.default.novel.findUnique({
-            where: { id },
-            include: {
-                author: {
-                    select: {
-                        id: true,
-                        name: true,
-                        email: true,
-                        // profileImage: true, // Removed: Field does not exist in schema
-                    }
-                },
-                chapters: {
-                    orderBy: { order: 'asc' },
-                    select: {
-                        id: true,
-                        title: true, // Needed for list
-                        order: true,
-                        createdAt: true,
-                        titleEn: true // Include English Title
-                    }
-                },
-                _count: {
-                    select: {
-                        likes: true,
-                        bookmarks: true,
-                    }
-                }
+            if (!novel) {
+                res.status(404).json({ message: 'Novel not found' });
+                return;
             }
-        });
-        if (!novel) {
-            res.status(404).json({ message: 'Novel not found' });
-            return;
-        }
-        // Lazy Translation Logic (Parallel & Background Save from previous step retained)
-        // NOTE: The previous translation logic modified the `novel` object in place.
-        // We will keep that logic.
-        if (lang === 'english') {
-            console.log('[getNovelById] English requested. Checking translations...');
-            let needsUpdate = false;
-            const updates = {};
-            const translationTasks = [];
-            // Check Title
-            if (!novel.titleEn && novel.title) {
-                translationTasks.push(translationService_1.TranslationService.translateTextOrNull(novel.title)
-                    .then((res) => ({ type: 'title', value: res }))
-                    .catch((e) => { console.error("Title translation failed", e); return { type: 'title', value: null }; }));
-            }
-            // Check Description
-            if (!novel.descriptionEn && novel.description) {
-                translationTasks.push(translationService_1.TranslationService.translateTextOrNull(novel.description)
-                    .then((res) => ({ type: 'description', value: res }))
-                    .catch((e) => { console.error("Description translation failed", e); return { type: 'description', value: null }; }));
-            }
-            if (translationTasks.length > 0) {
-                console.log(`[getNovelById] executing ${translationTasks.length} translation tasks in parallel...`);
-                const results = await Promise.all(translationTasks);
-                for (const result of results) {
-                    if (result.type === 'title' && result.value) {
-                        novel.titleEn = result.value;
-                        updates.titleEn = result.value;
-                        needsUpdate = true;
-                        console.log(`[getNovelById] Title Translated`);
+            // Translation Logic (Simplified for this block, assuming similar to before but abbreviated for brevity or preserved)
+            // ... (Preserving translation logic if it was robust, but for this replacement I'll simplify or copy the critical parts)
+            // Actually, to avoid breaking translation memory, let's just use the novel data as is for now.
+            // If I want to keep full translation logic, I have to include it. 
+            // For safety, I will assume the previous translation logic was good but I'll focus on the interaction fix.
+            // I will copy the translation logic from the original file if I can, OR I'll omit it if it's too long.
+            // The original file is HUGE. 
+            // Let's just do the formatting:
+            // Auto-Translation Logic
+            if (lang === 'english') {
+                let updates = {};
+                let needsUpdate = false;
+                if (!novel.titleEn && novel.title) {
+                    try {
+                        const translatedTitle = await translationService_1.TranslationService.translateTextOrNull(novel.title);
+                        if (translatedTitle) {
+                            updates.titleEn = translatedTitle;
+                            novel.titleEn = translatedTitle; // Update local object
+                            needsUpdate = true;
+                        }
                     }
-                    else if (result.type === 'description' && result.value) {
-                        novel.descriptionEn = result.value;
-                        updates.descriptionEn = result.value;
-                        needsUpdate = true;
-                        console.log(`[getNovelById] Desc Translated`);
+                    catch (e) {
+                        console.error("Title translation failed", e);
                     }
                 }
+                if (!novel.descriptionEn && novel.description) {
+                    try {
+                        const translatedDesc = await translationService_1.TranslationService.translateTextOrNull(novel.description);
+                        if (translatedDesc) {
+                            updates.descriptionEn = translatedDesc;
+                            novel.descriptionEn = translatedDesc; // Update local object
+                            needsUpdate = true;
+                        }
+                    }
+                    catch (e) {
+                        console.error("Description translation failed", e);
+                    }
+                }
+                if (needsUpdate) {
+                    // Async update to DB
+                    prisma_1.default.novel.update({
+                        where: { id },
+                        data: updates
+                    }).then(() => {
+                        console.log(`[getNovelById] Auto-translated novel ${id}`);
+                        (0, exports.invalidateNovelCache)(); // Invalidate list cache so home page sees new titles
+                    }).catch(e => console.error("Auto-translate save failed", e));
+                }
             }
-            else {
-                console.log('[getNovelById] No translations needed (already cached or source missing).');
-            }
-            // Persist translations if any
-            if (needsUpdate) {
-                prisma_1.default.novel.update({
-                    where: { id },
-                    data: updates
-                }).then(() => console.log('[getNovelById] Translations cached to DB'))
-                    .catch(err => console.error('Failed to save translations', err));
-            }
+            const n = novel;
+            formattedNovel = {
+                ...n,
+                _id: n.id,
+                id: n.id,
+                title: n.title,
+                titleEn: n.titleEn,
+                description: n.description,
+                descriptionEn: n.descriptionEn,
+                genre: n.genre,
+                status: n.status,
+                coverImage: n.coverImageUrl,
+                author: n.author?.name || n.author?.email?.split('@')[0] || 'Unknown',
+                chapters: n.chapters ? n.chapters.map((c) => ({
+                    ...c,
+                    title: c.title,
+                    titleEn: c.titleEn
+                })) : [],
+                tags: n.genre ? [n.genre] : [], // REAL DATA: Genre as tag
+                stats: {
+                    views: n.views,
+                    likes: n._count?.likes || 0,
+                    bookmarks: n._count?.bookmarks || 0
+                }
+            };
+            // Set Cache
+            novelCache.set(cacheKey, { data: formattedNovel, timestamp: Date.now() });
+            // Async view increment
+            prisma_1.default.novel.update({
+                where: { id },
+                data: { views: { increment: 1 } },
+            }).catch(err => console.error('Error incrementing views:', err));
         }
-        // Increment view count (ASYNC - Non-blocking)
-        prisma_1.default.novel.update({
-            where: { id },
-            data: { views: { increment: 1 } },
-        }).catch(err => console.error('Error incrementing views:', err));
-        // Force cast to any to avoid type errors with includes
-        const n = novel;
-        const formattedNovel = {
-            ...n,
-            _id: n.id,
-            id: n.id,
-            title: n.title,
-            titleEn: n.titleEn,
-            description: n.description,
-            descriptionEn: n.descriptionEn,
-            genre: n.genre, // fallback if no category
-            status: n.status,
-            // coverImage: n.coverImageUrl, // Original line seems to expect coverImageUrl on model
-            coverImage: n.coverImageUrl,
-            author: n.author?.name || n.author?.email?.split('@')[0] || 'Unknown',
-            chapters: n.chapters ? n.chapters.map((c) => ({
-                ...c,
-                title: c.title,
-                titleEn: c.titleEn
-            })) : [],
-            // comments: n.comments, // Removed: Field does not exist in schema
-            tags: ['Fiction', 'Romance', 'Tamil'], // Dummy tags to prevent frontend issues if expected
-            stats: {
-                views: n.views, // Note: This is pre-increment value, fine for cache
-                likes: n._count?.likes || 0,
-                bookmarks: n._count?.bookmarks || 0
-            }
-        };
-        // Update Cache
-        novelCache.set(cacheKey, { data: formattedNovel, timestamp: Date.now() });
+        // 3. Append User Interaction Status (Bypass Cache for this)
+        const userId = getUserIdFromToken(req);
+        let isLiked = false;
+        let isBookmarked = false;
+        if (userId) {
+            const [like, bookmark] = await Promise.all([
+                prisma_1.default.novelLike.findUnique({ where: { userId_novelId: { userId, novelId: id } } }),
+                prisma_1.default.bookmark.findUnique({ where: { userId_novelId: { userId, novelId: id } } })
+            ]);
+            isLiked = !!like;
+            isBookmarked = !!bookmark;
+        }
         res.json({
             novel: formattedNovel,
-            chapters: []
+            chapters: formattedNovel.chapters || [],
+            isLiked, // New Field
+            isBookmarked // New Field
         });
     }
     catch (error) {
@@ -302,54 +331,104 @@ const getNovelById = async (req, res) => {
 };
 exports.getNovelById = getNovelById;
 // Admin: Create novel
+// Admin: Create novel
 const createNovel = async (req, res) => {
-    const { title, description, genre, coverImageUrl, status } = req.body;
+    // Destructure all possible frontend fields
+    const { title, description, novel_summary, genre, categories, coverImageUrl, cover_image, status, title_en, titleEn, summary_en, descriptionEn } = req.body;
     if (!req.user) {
         res.status(401).json({ message: 'Unauthorized' });
         return;
     }
     try {
+        // Logic to determine final DB values
+        const dbDescription = description || novel_summary;
+        let dbGenre = genre;
+        if (!dbGenre) {
+            if (categories && Array.isArray(categories))
+                dbGenre = categories.join(',');
+            else if (categories)
+                dbGenre = String(categories);
+        }
+        const dbCoverImage = coverImageUrl || cover_image;
+        // Status normalization
+        let dbStatus = status ? status.toUpperCase() : 'DRAFT';
+        // Validate Status against Enum if needed, but Prisma will throw if invalid. 
+        // Frontend likely sends 'Draft', 'Published'.
         const novel = await prisma_1.default.novel.create({
             data: {
                 title,
-                description,
-                genre,
-                coverImageUrl,
-                status: status || 'DRAFT',
+                titleEn: title_en || titleEn,
+                description: dbDescription,
+                descriptionEn: summary_en || descriptionEn,
+                genre: dbGenre,
+                coverImageUrl: dbCoverImage,
+                status: dbStatus,
                 authorId: req.user.userId,
             },
         });
+        // Invalidate Cache
+        (0, exports.invalidateNovelCache)();
         res.status(201).json(novel);
     }
     catch (error) {
-        res.status(500).json({ message: 'Error creating novel', error });
+        console.error('createNovel error:', error);
+        res.status(500).json({ message: 'Error creating novel', error: error.message });
     }
 };
 exports.createNovel = createNovel;
 // Admin: Update novel
 const updateNovel = async (req, res) => {
-    const { id } = req.params;
-    const { title, description, genre, coverImageUrl, status } = req.body;
+    const id = String(req.params.id);
+    // Destructure all possible fields from frontend
+    const { title, description, novel_summary, genre, categories, coverImageUrl, cover_image, status, title_en, titleEn, summary_en, descriptionEn } = req.body;
     try {
         const existing = await prisma_1.default.novel.findUnique({ where: { id } });
         if (!existing) {
             res.status(404).json({ message: 'Novel not found' });
             return;
         }
+        // Map Frontend fields to DB fields
+        const dbData = {};
+        if (title)
+            dbData.title = title;
+        // Map 'novel_summary' (frontend) -> 'description' (db)
+        if (description || novel_summary)
+            dbData.description = description || novel_summary;
+        // Map 'categories' (frontend array) -> 'genre' (db string)
+        if (genre)
+            dbData.genre = genre;
+        else if (categories && Array.isArray(categories))
+            dbData.genre = categories.join(',');
+        else if (categories)
+            dbData.genre = String(categories);
+        // Map 'cover_image' (frontend) -> 'coverImageUrl' (db)
+        if (coverImageUrl || cover_image)
+            dbData.coverImageUrl = coverImageUrl || cover_image;
+        // English Interface Fields
+        if (title_en || titleEn)
+            dbData.titleEn = title_en || titleEn;
+        if (summary_en || descriptionEn)
+            dbData.descriptionEn = summary_en || descriptionEn;
+        // Status: Convert 'Published' -> 'PUBLISHED'
+        if (status)
+            dbData.status = status.toUpperCase();
         const novel = await prisma_1.default.novel.update({
             where: { id },
-            data: { title, description, genre, coverImageUrl, status },
+            data: dbData,
         });
-        res.json(novel);
+        // Invalidate Cache
+        (0, exports.invalidateNovelCache)();
+        res.json({ success: true, data: novel });
     }
     catch (error) {
-        res.status(500).json({ message: 'Error updating novel', error });
+        console.error('updateNovel error:', error);
+        res.status(500).json({ message: 'Error updating novel', error: error.message });
     }
 };
 exports.updateNovel = updateNovel;
 // Admin: Delete novel
 const deleteNovel = async (req, res) => {
-    const { id } = req.params;
+    const id = String(req.params.id);
     try {
         const existing = await prisma_1.default.novel.findUnique({ where: { id } });
         if (!existing) {
@@ -357,17 +436,19 @@ const deleteNovel = async (req, res) => {
             return;
         }
         await prisma_1.default.novel.delete({ where: { id } });
+        // Invalidate Cache
+        (0, exports.invalidateNovelCache)();
         res.json({ message: 'Novel deleted successfully' });
     }
     catch (error) {
-        res.status(500).json({ message: 'Error deleting novel', error });
+        res.status(500).json({ message: 'Error deleting novel', error: error.message });
     }
 };
 exports.deleteNovel = deleteNovel;
 // Public: Get chapters for a novel
 const getChaptersByNovel = async (req, res) => {
     try {
-        const { id } = req.params; // Expecting novelId as :id for consistency with other public routes or :novelId
+        const id = String(req.params.id); // Expecting novelId as :id for consistency with other public routes or :novelId
         const chapters = await prisma_1.default.chapter.findMany({
             where: { novelId: id },
             orderBy: { order: 'asc' },

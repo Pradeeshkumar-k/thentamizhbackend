@@ -58,7 +58,11 @@ const translateContent = async (text, to = 'en') => {
     // 2. Fallback to Google Translate (Free/Standard)
     try {
         log('Falling back to Google Translate...');
-        const res = await (0, google_translate_api_x_1.translate)(text, { to });
+        const res = await (0, google_translate_api_x_1.translate)(text, {
+            to,
+            forceBatch: false,
+            rejectOnPartialFail: false
+        });
         log('Google Translation Success');
         return res.text;
     }

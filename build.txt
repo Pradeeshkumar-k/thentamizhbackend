@@ -1,0 +1,45 @@
+npm warn using --force Recommended protections disabled.
+src/controllers/adminController.ts(139,16): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/adminController.ts(160,28): error TS2551: Property 'author' does not exist on type '{ id: string; createdAt: Date; description: string; title: string; genre: string; status: NovelStatus; titleEn: string | null; descriptionEn: string | null; views: number; coverImageUrl: string | null; authorId: string; updatedAt: Date; }'. Did you mean 'authorId'?
+src/controllers/adminController.ts(165,25): error TS2339: Property 'chapters' does not exist on type '{ id: string; createdAt: Date; description: string; title: string; genre: string; status: NovelStatus; titleEn: string | null; descriptionEn: string | null; views: number; coverImageUrl: string | null; authorId: string; updatedAt: Date; }'.
+src/controllers/adminController.ts(235,16): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/adminController.ts(242,18): error TS2322: Type 'string | string[]' is not assignable to type 'string | StringFilter<"Chapter"> | undefined'.
+  Type 'string[]' is not assignable to type 'string | StringFilter<"Chapter"> | undefined'.
+src/controllers/adminController.ts(268,16): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/adminController.ts(292,16): error TS2322: Type 'string | string[]' is not assignable to type 'string | StringFilter<"Chapter"> | undefined'.
+  Type 'string[]' is not assignable to type 'string | StringFilter<"Chapter"> | undefined'.
+src/controllers/adminController.ts(322,16): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/adminController.ts(360,9): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/adminController.ts(396,16): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/adminController.ts(417,16): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/chapterController.ts(30,20): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/chapterController.ts(39,16): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/chapterController.ts(101,34): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/chapterController.ts(150,16): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/chapterController.ts(201,65): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/chapterController.ts(208,16): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/chapterController.ts(221,65): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/chapterController.ts(227,44): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/chapterController.ts(247,9): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/chapterController.ts(271,11): error TS2322: Type 'string | string[]' is not assignable to type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/commentController.ts(44,64): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/commentController.ts(57,44): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
