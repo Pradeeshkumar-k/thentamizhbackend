@@ -18,6 +18,7 @@ export const invalidateNovelCache = () => {
 export const getNovels = async (req: Request, res: Response): Promise<void> => {
   const { page = 1, limit = 10, search, sort } = req.query;
   console.log(`[getNovels] Request: page=${page} limit=${limit} search=${search}`);
+  console.log('[getNovels] Fix Applied: Safe Author Access');
   
   try {
     const where: any = {};
