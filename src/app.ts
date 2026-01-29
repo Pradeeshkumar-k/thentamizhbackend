@@ -25,6 +25,8 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+import { checkHealth } from './controllers/healthController';
+
 app.use('/api/auth', authRoutes);
 app.use('/api/novels', novelRoutes);
 app.use('/api/chapters', chapterRoutes);
@@ -32,8 +34,10 @@ app.use('/api/comments', commentRoutes);
 app.use('/api/reading', readingRoutes);
 app.use('/api/admin', adminRoutes);
 
+app.get('/api/health', checkHealth); // New Debug Route
+
 app.get('/api/ping', (req, res) => {
-  res.json({ pong: true, time: new Date().toISOString() });
+  res.json({ pong: true, time: new Date().toISOString(), version: 'v2-debug' });
 });
 
 app.get('/', (req, res) => {
