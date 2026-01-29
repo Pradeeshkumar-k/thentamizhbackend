@@ -6,6 +6,10 @@ const client_1 = require("@prisma/client");
 const adapter_pg_1 = require("@prisma/adapter-pg");
 const pg_1 = require("pg");
 const connectionString = process.env.DATABASE_URL;
+console.log('[(DB-Debug] Initializing Prisma Pool. ConnectionString exists:', !!connectionString);
+if (connectionString) {
+    console.log('[DB-Debug] Connection string starts with:', connectionString.substring(0, 15) + '...');
+}
 // Configure pool with SSL settings for Supabase
 const pool = new pg_1.Pool({
     connectionString,

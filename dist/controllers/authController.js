@@ -29,7 +29,7 @@ const register = async (req, res) => {
         res.status(201).json({ user, ...tokens });
     }
     catch (error) {
-        res.status(500).json({ message: 'Server error', error });
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
 exports.register = register;
@@ -58,7 +58,7 @@ const login = async (req, res) => {
         res.json({ user, ...tokens });
     }
     catch (error) {
-        res.status(500).json({ message: 'Server error', error });
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
 exports.login = login;

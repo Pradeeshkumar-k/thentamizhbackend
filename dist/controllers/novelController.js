@@ -19,6 +19,7 @@ exports.invalidateNovelCache = invalidateNovelCache;
 const getNovels = async (req, res) => {
     const { page = 1, limit = 10, search, sort } = req.query;
     console.log(`[getNovels] Request: page=${page} limit=${limit} search=${search}`);
+    console.log('[getNovels] Fix Applied: Safe Author Access');
     try {
         const where = {};
         if (search) {
@@ -75,7 +76,7 @@ const getNovels = async (req, res) => {
             genre: novel.genre,
             status: novel.status,
             coverImage: novel.coverImageUrl,
-            author: novel.author.name || novel.author.email.split('@')[0],
+            author: novel.author?.name || novel.author?.email?.split('@')[0] || 'Unknown',
             totalChapters: novel._count?.chapters || 0,
             stats: {
                 views: novel.views,
@@ -101,8 +102,16 @@ const getNovels = async (req, res) => {
         });
     }
     catch (error) {
-        console.error('getNovels error DETAILS:', error);
-        res.status(500).json({ message: 'Error fetching novels', error: error.message });
+        console.error('ANTIGRAVITY_DEBUG_ERROR [getNovels]:', error);
+        // res.status(500).json({ message: 'Error fetching novels', error: error.message });
+        // DEBUG MODE: Return full error details
+        res.status(500).json({
+            message: 'Error fetching novels',
+            error_message: error.message,
+            error_code: error.code,
+            error_meta: error.meta,
+            stack: error.stack
+        });
     }
 };
 exports.getNovels = getNovels;
@@ -133,7 +142,7 @@ const warmUpCache = async () => {
             genre: novel.genre,
             status: novel.status,
             coverImage: novel.coverImageUrl,
-            author: novel.author.name || novel.author.email.split('@')[0],
+            author: novel.author?.name || novel.author?.email?.split('@')[0] || 'Unknown',
             totalChapters: novel._count?.chapters || 0,
             stats: {
                 views: novel.views,

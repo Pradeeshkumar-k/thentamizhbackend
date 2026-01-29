@@ -7,6 +7,11 @@ import { Pool } from 'pg';
 
 const connectionString = process.env.DATABASE_URL;
 
+console.log('[(DB-Debug] Initializing Prisma Pool. ConnectionString exists:', !!connectionString);
+if (connectionString) {
+    console.log('[DB-Debug] Connection string starts with:', connectionString.substring(0, 15) + '...');
+}
+
 // Configure pool with SSL settings for Supabase
 const pool = new Pool({
   connectionString,

@@ -108,7 +108,7 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
       limit: Number(limit)
     });
   } catch (error: any) {
-    console.error('getNovels error DETAILS:', error);
+    console.error('ANTIGRAVITY_DEBUG_ERROR [getNovels]:', error);
     // res.status(500).json({ message: 'Error fetching novels', error: error.message });
      // DEBUG MODE: Return full error details
      res.status(500).json({ 

@@ -150,7 +150,7 @@ const getChapterById = async (req, res) => {
     }
     catch (error) {
         console.error('getChapterById error:', error);
-        res.status(500).json({ message: 'Error fetching chapter', error });
+        res.status(500).json({ message: 'Error fetching chapter', error: error.message });
     }
 };
 exports.getChapterById = getChapterById;
@@ -170,7 +170,7 @@ const createChapter = async (req, res) => {
         res.status(201).json(chapter);
     }
     catch (error) {
-        res.status(500).json({ message: 'Error creating chapter', error });
+        res.status(500).json({ message: 'Error creating chapter', error: error.message });
     }
 };
 exports.createChapter = createChapter;
@@ -191,7 +191,7 @@ const updateChapter = async (req, res) => {
         res.json(chapter);
     }
     catch (error) {
-        res.status(500).json({ message: 'Error updating chapter', error });
+        res.status(500).json({ message: 'Error updating chapter', error: error.message });
     }
 };
 exports.updateChapter = updateChapter;
@@ -208,7 +208,7 @@ const deleteChapter = async (req, res) => {
         res.json({ message: 'Chapter deleted successfully' });
     }
     catch (error) {
-        res.status(500).json({ message: 'Error deleting chapter', error });
+        res.status(500).json({ message: 'Error deleting chapter', error: error.message });
     }
 };
 exports.deleteChapter = deleteChapter;
@@ -230,7 +230,7 @@ const likeChapter = async (req, res) => {
         res.status(201).json({ message: 'Chapter liked' });
     }
     catch (error) {
-        res.status(400).json({ message: 'Error liking chapter (already liked?)', error });
+        res.status(400).json({ message: 'Error liking chapter (already liked?)', error: error.message });
     }
 };
 exports.likeChapter = likeChapter;
@@ -254,7 +254,7 @@ const unlikeChapter = async (req, res) => {
         res.json({ message: 'Chapter unliked' });
     }
     catch (error) {
-        res.status(500).json({ message: 'Error unliking chapter', error });
+        res.status(500).json({ message: 'Error unliking chapter', error: error.message });
     }
 };
 exports.unlikeChapter = unlikeChapter;
