@@ -109,7 +109,15 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error: any) {
     console.error('getNovels error DETAILS:', error);
-    res.status(500).json({ message: 'Error fetching novels', error: error.message });
+    // res.status(500).json({ message: 'Error fetching novels', error: error.message });
+     // DEBUG MODE: Return full error details
+     res.status(500).json({ 
+         message: 'Error fetching novels', 
+         error_message: error.message,
+         error_code: error.code,
+         error_meta: error.meta,
+         stack: error.stack
+     });
   }
 };
 
