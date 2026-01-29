@@ -169,7 +169,7 @@ export const getChapterById = async (req: Request, res: Response): Promise<void>
     res.json(formattedChapter);
   } catch (error) {
     console.error('getChapterById error:', error);
-    res.status(500).json({ message: 'Error fetching chapter', error });
+    res.status(500).json({ message: 'Error fetching chapter', error: (error as any).message });
   }
 };
 
@@ -189,7 +189,7 @@ export const createChapter = async (req: Request, res: Response): Promise<void> 
     });
     res.status(201).json(chapter);
   } catch (error) {
-    res.status(500).json({ message: 'Error creating chapter', error });
+    res.status(500).json({ message: 'Error creating chapter', error: (error as any).message });
   }
 };
 
@@ -210,7 +210,7 @@ export const updateChapter = async (req: Request, res: Response) => {
     });
     res.json(chapter);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating chapter', error });
+    res.status(500).json({ message: 'Error updating chapter', error: (error as any).message });
   }
 };
 
@@ -227,7 +227,7 @@ export const deleteChapter = async (req: Request, res: Response) => {
     await prisma.chapter.delete({ where: { id } });
     res.json({ message: 'Chapter deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting chapter', error });
+    res.status(500).json({ message: 'Error deleting chapter', error: (error as any).message });
   }
 };
 
@@ -250,7 +250,7 @@ export const likeChapter = async (req: AuthRequest, res: Response): Promise<void
     });
     res.status(201).json({ message: 'Chapter liked' });
   } catch (error) {
-    res.status(400).json({ message: 'Error liking chapter (already liked?)', error });
+    res.status(400).json({ message: 'Error liking chapter (already liked?)', error: (error as any).message });
   }
 };
 
@@ -275,6 +275,6 @@ export const unlikeChapter = async (req: AuthRequest, res: Response): Promise<vo
     });
     res.json({ message: 'Chapter unliked' });
   } catch (error) {
-    res.status(500).json({ message: 'Error unliking chapter', error });
+    res.status(500).json({ message: 'Error unliking chapter', error: (error as any).message });
   }
 };

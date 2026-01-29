@@ -28,7 +28,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     const tokens = generateTokens(user.id, user.role);
     res.status(201).json({ user, ...tokens });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    res.status(500).json({ message: 'Server error', error: (error as any).message });
   }
 };
 
@@ -60,7 +60,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const tokens = generateTokens(user.id, user.role);
     res.json({ user, ...tokens });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    res.status(500).json({ message: 'Server error', error: (error as any).message });
   }
 };
 
