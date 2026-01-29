@@ -80,7 +80,7 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
       genre: novel.genre,
       status: novel.status,
       coverImage: novel.coverImageUrl,
-      author: novel.author.name || novel.author.email.split('@')[0],
+      author: novel.author?.name || novel.author?.email?.split('@')[0] || 'Unknown',
       totalChapters: novel._count?.chapters || 0,
       stats: {
         views: novel.views,
@@ -140,7 +140,7 @@ export const warmUpCache = async () => {
             genre: novel.genre,
             status: novel.status,
             coverImage: novel.coverImageUrl,
-            author: novel.author.name || novel.author.email.split('@')[0],
+            author: novel.author?.name || novel.author?.email?.split('@')[0] || 'Unknown',
             totalChapters: novel._count?.chapters || 0,
             stats: {
                 views: novel.views,
