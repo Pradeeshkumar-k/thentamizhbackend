@@ -14,11 +14,26 @@ import adminRoutes from './routes/adminRoutes';
 const app = express();
 
 app.use(cors({
-  origin: [
-    "https://thentamizhnovel.vercel.app",
-    "http://localhost:5173",
-    "http://localhost:3000"
-  ],
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      "https://thentamizhnovel.vercel.app",
+      "http://localhost:5173",
+      "http://localhost:3000"
+    ];
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    }
+    
+    // Allow any Vercel preview deployment
+    if (origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+
+    return callback(new Error('Not allowed by CORS'), false);
+  },
   methods: ["GET","POST","PUT","DELETE"],
   credentials: true
 }));
