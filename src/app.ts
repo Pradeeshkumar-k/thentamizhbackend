@@ -36,6 +36,35 @@ app.use('/api/admin', adminRoutes);
 
 app.get('/api/health', checkHealth); // New Debug Route
 
+import prisma from './utils/prisma';
+
+app.get('/api/debug-db', async (req, res) => {
+  try {
+    console.log('Testing DB Access...');
+    const userCount = await prisma.user.count();
+    res.json({ 
+      status: 'success', 
+      message: 'Database connection successful', 
+      stats: { userCount },
+      env: {
+        db_url_configured: !!process.env.DATABASE_URL,
+        node_env: process.env.NODE_ENV
+      }
+    });
+  } catch (error: any) {
+    console.error('DB Debug Error:', error);
+    res.status(500).json({ 
+      status: 'error', 
+      message: 'Database connection failed', 
+      error_name: error.name,
+      error_message: error.message,
+      error_code: error.code,
+      meta: error.meta,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
 app.get('/api/ping', (req, res) => {
   res.json({ pong: true, time: new Date().toISOString(), version: 'v2-debug' });
 });
