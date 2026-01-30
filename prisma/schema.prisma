@@ -1,11 +1,11 @@
 generator client {
-  provider        = "prisma-client-js"
-  binaryTargets   = ["native", "rhel-openssl-3.0.x", "rhel-openssl-1.0.x"]
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "rhel-openssl-1.0.x"]
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url = env("DATABASE_URL")
 }
 
 enum Role {
@@ -43,7 +43,6 @@ model Novel {
   description   String
   genre         String
   status        NovelStatus @default(DRAFT)
-  // English Translation Fields
   titleEn       String?
   descriptionEn String?
   views         Int         @default(0)
@@ -69,7 +68,6 @@ model Chapter {
   novel        Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
   title        String
   content      String
-  // English Translation Fields
   titleEn      String?
   contentEn    String?
   thumbnailUrl String?
@@ -122,7 +120,7 @@ model Like {
   chapterId String
   chapter   Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([chapterId, userId])
 }
