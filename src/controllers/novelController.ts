@@ -258,9 +258,22 @@ export const getNovelById = async (req: Request, res: Response): Promise<void> =
             let updates: any = {};
             let needsUpdate = false;
 
+// Helper for Timeout
+const promiseWithTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
+    return Promise.race([
+        promise,
+        new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))
+    ]);
+};
+
             if (!novel.titleEn && novel.title) {
                 try {
-                    const translatedTitle = await TranslationService.translateTextOrNull(novel.title);
+                    // Timeout set to 2000ms (2 seconds) to prevent hanging
+                    const translatedTitle = await promiseWithTimeout(
+                        TranslationService.translateTextOrNull(novel.title),
+                        2000,
+                        null
+                    );
                     if (translatedTitle) {
                         updates.titleEn = translatedTitle;
                         (novel as any).titleEn = translatedTitle; // Update local object
@@ -273,7 +286,11 @@ export const getNovelById = async (req: Request, res: Response): Promise<void> =
 
             if (!novel.descriptionEn && novel.description) {
                 try {
-                    const translatedDesc = await TranslationService.translateTextOrNull(novel.description);
+                    const translatedDesc = await promiseWithTimeout(
+                         TranslationService.translateTextOrNull(novel.description),
+                         2000,
+                         null
+                    );
                     if (translatedDesc) {
                         updates.descriptionEn = translatedDesc;
                         (novel as any).descriptionEn = translatedDesc; // Update local object
