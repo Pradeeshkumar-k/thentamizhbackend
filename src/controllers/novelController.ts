@@ -29,6 +29,10 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
       ];
     }
 
+    // Safeguard: Exclude legacy numeric IDs that cause Prisma "Inconsistent column data" errors
+    // We only want UUID-like strings (usually 36 chars) or at least not single digits
+    where.id = { notIn: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'] };
+
     // Optimization: Check Cache (Only if no search filters)
     if (!search && novelListCache && (Date.now() - novelListCache.timestamp < CACHE_TTL)) {
        // console.log('[getNovels] Serving from Cache ⚡');
@@ -53,7 +57,7 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
         select: {
              id: true,
              title: true,
-             titleEn: true, // Fetch English Title
+             titleEn: true, 
              genre: true,
              status: true,
              coverImageUrl: true,
