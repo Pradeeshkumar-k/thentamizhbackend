@@ -73,6 +73,7 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
     ]);
 
     const formattedNovels = novels.map((novel: any) => ({
+      _id: novel.id,
       id: novel.id,
       title: novel.title,
       titleEn: novel.titleEn,
@@ -81,7 +82,11 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
       coverImage: novel.coverImageUrl,
       author: novel.author?.name || novel.author?.email?.split('@')[0] || 'Unknown',
       totalChapters: novel._count?.chapters || 0,
-      stats: { views: novel.views },
+      stats: {
+        views: novel.views,
+        likes: 0,
+        bookmarks: 0
+      },
       createdAt: novel.createdAt,
       updatedAt: novel.updatedAt
     }));
@@ -91,8 +96,10 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
     }
 
     res.json({
-      success: true,
-      data: formattedNovels,
+      novels: formattedNovels,
+      total,
+      page: Number(page),
+      limit: Number(limit),
       pagination: {
         total,
         page: Number(page),
