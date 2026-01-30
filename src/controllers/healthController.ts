@@ -5,7 +5,7 @@ export const checkHealth = async (req: Request, res: Response) => {
   const healthCheck: any = {
     uptime: process.uptime(),
     timestamp: Date.now(),
-    deploymentId: 'FIX_ATTEMPT_02_CHECK_DB', // Unique ID to verify deployment
+    deploymentId: 'PRISMA_V3_NATIVE_ENGINE', // Unique ID to verify deployment
     message: 'OK',
     dbDetails: null,
     dbError: null

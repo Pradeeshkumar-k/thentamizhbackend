@@ -1,6 +1,6 @@
 const https = require('https');
 
-const url = 'https://thentamizhbackend.vercel.app/api/novels?limit=50';
+const url = 'https://thentamizhbackend.vercel.app/api/ping';
 
 https.get(url, (res) => {
     let data = '';
@@ -8,16 +8,12 @@ https.get(url, (res) => {
         data += chunk;
     });
     res.on('end', () => {
+        console.log('Status Code:', res.statusCode);
         try {
             const json = JSON.parse(data);
-            if (json.stack) {
-                console.log('--- STACK TRACE ---');
-                json.stack.split('\n').forEach(line => console.log(line));
-            } else {
-                console.log(JSON.stringify(json, null, 2));
-            }
+            console.log(JSON.stringify(json, null, 2));
         } catch (e) {
-            console.log(data);
+            console.log('Raw Data:', data);
         }
     });
 }).on('error', (err) => {
