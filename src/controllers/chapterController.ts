@@ -26,10 +26,10 @@ export const getChapterById = async (req: Request, res: Response): Promise<void>
     if (cached && (Date.now() - cached.timestamp < CHAPTER_CACHE_TTL)) {
        // console.log(`[getChapterById] Serving ${id} from Cache ⚡`);
        // Async View Increment
-       prisma.chapter.update({
+       await prisma.chapter.update({
           where: { id },
           data: { views: { increment: 1 } }
-       }).catch((e: any) => console.error("Async View Inc Failed", e));
+       });
        
        res.json(cached.data);
        return;
@@ -146,10 +146,10 @@ export const getChapterById = async (req: Request, res: Response): Promise<void>
     }
 
     // Increment view count asynchronously
-    prisma.chapter.update({
+    await prisma.chapter.update({
       where: { id },
       data: { views: { increment: 1 } }
-    }).catch((err: any) => console.error('Error incrementing chapter views:', err));
+    });
 
     // Map to frontend expected format
     const formattedChapter = {

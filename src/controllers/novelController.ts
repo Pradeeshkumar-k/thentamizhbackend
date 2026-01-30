@@ -219,10 +219,10 @@ export const getNovelById = async (req: Request, res: Response): Promise<void> =
     if (cached && (Date.now() - cached.timestamp < NOVEL_CACHE_TTL)) {
        console.log(`[getNovelById] Serving ${id} from Cache ⚡`);
        // Fire-and-forget view increment even for cached hits to maintain stats accuracy
-       prisma.novel.update({
+       await prisma.novel.update({
           where: { id },
           data: { views: { increment: 1 } },
-       }).catch(e => console.error("Async View Inc Failed", e));
+       });
 
        formattedNovel = cached.data;
     } else {
@@ -303,13 +303,12 @@ const promiseWithTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Pr
 
             if (needsUpdate) {
                 // Async update to DB
-                prisma.novel.update({
+                await prisma.novel.update({
                     where: { id },
                     data: updates
-                }).then(() => {
-                    console.log(`[getNovelById] Auto-translated novel ${id}`);
-                    invalidateNovelCache(); // Invalidate list cache so home page sees new titles
-                }).catch(e => console.error("Auto-translate save failed", e));
+                });
+                console.log(`[getNovelById] Auto-translated novel ${id}`);
+                invalidateNovelCache(); // Invalidate list cache so home page sees new titles
             }
         }
 
@@ -343,10 +342,10 @@ const promiseWithTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Pr
         novelCache.set(cacheKey, { data: formattedNovel, timestamp: Date.now() });
         
         // Async view increment
-        prisma.novel.update({
+        await prisma.novel.update({
              where: { id },
              data: { views: { increment: 1 } },
-        }).catch(err => console.error('Error incrementing views:', err));
+        });
     }
 
     // 3. Append User Interaction Status (Bypass Cache for this)

@@ -15,8 +15,11 @@ if (connectionString) {
 // Configure pool with SSL settings for Supabase
 const pool = new Pool({
   connectionString,
+  max: 20, // Increased from default 10
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
   ssl: {
-    rejectUnauthorized: false, // Allow self-signed certificates from Supabase
+    rejectUnauthorized: false,
   },
 });
 
