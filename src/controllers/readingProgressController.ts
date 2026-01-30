@@ -5,7 +5,7 @@ import prisma from '../utils/prisma';
 // Update Reading Progress
 export const updateReadingProgress = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { novelId, chapterId, progress } = req.body;
+    const { novelId, chapterId, lastChapter, progress, isCompleted } = req.body;
     const userId = req.user?.userId;
 
     if (!userId) {
@@ -13,7 +13,10 @@ export const updateReadingProgress = async (req: AuthRequest, res: Response): Pr
        return;
     }
 
-    if (!novelId || !chapterId) {
+    // Support both chapterId and lastChapter (from frontend migration)
+    const activeChapterId = chapterId || lastChapter;
+
+    if (!novelId || !activeChapterId) {
       res.status(400).json({ message: 'Novel ID and Chapter ID are required' });
       return;
     }
@@ -27,27 +30,27 @@ export const updateReadingProgress = async (req: AuthRequest, res: Response): Pr
         }
       },
       update: {
-        chapterId,
+        chapterId: activeChapterId,
         progress: progress || 0,
         lastRead: new Date()
       },
       create: {
         userId,
         novelId,
-        chapterId,
+        chapterId: activeChapterId,
         progress: progress || 0,
         lastRead: new Date()
       }
     });
 
-    res.json(readingProgress);
+    res.json({ success: true, data: readingProgress });
   } catch (error) {
     console.error('updateReadingProgress error:', error);
-    res.status(500).json({ message: 'Error updating reading progress', error });
+    res.status(500).json({ success: false, message: 'Error updating reading progress', error });
   }
 };
 
-// Get Reading Progress for a Novel
+// Get Reading Progress
 export const getReadingProgress = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { novelId } = req.query;
@@ -58,32 +61,61 @@ export const getReadingProgress = async (req: AuthRequest, res: Response): Promi
        return;
     }
 
-    if (!novelId) {
-       res.status(400).json({ message: 'Novel ID is required' });
-       return;
+    // If novelId is provided, get progress for that specific novel
+    if (novelId) {
+      const progress = await prisma.readingProgress.findUnique({
+        where: {
+          userId_novelId: {
+            userId,
+            novelId: String(novelId)
+          }
+        },
+        include: {
+          chapter: {
+              select: {
+                  id: true,
+                  title: true,
+                  order: true
+              }
+          }
+        }
+      });
+      res.json({ success: true, data: progress });
+      return;
     }
 
-    const progress = await prisma.readingProgress.findUnique({
-      where: {
-        userId_novelId: {
-          userId,
-          novelId: String(novelId)
-        }
-      },
+    // If no novelId, return ALL progress for the user
+    // For now, let's just return all as "ongoing" or categorize them
+    const allProgress = await prisma.readingProgress.findMany({
+      where: { userId },
       include: {
-        chapter: {
-            select: {
-                id: true,
-                title: true,
-                order: true
-            }
+        novel: {
+          select: {
+            id: true,
+            title: true,
+            coverImageUrl: true,
+            author: { select: { name: true } }
+          }
         }
       }
     });
 
-    res.json(progress); // Returns null if not found, which is fine
+    // Format for frontend ReadingProgressContext
+    const formattedProgress = {
+      ongoing: allProgress.map(p => ({
+        novelId: p.novelId,
+        novelTitle: p.novel.title,
+        coverImage: p.novel.coverImageUrl,
+        author: p.novel.author?.name || 'Unknown',
+        lastChapter: p.chapterId,
+        updatedAt: p.lastRead
+      })),
+      completed: [] // We don't have a completion flag in DB yet, but could add it
+    };
+
+    res.json({ success: true, data: formattedProgress });
   } catch (error) {
     console.error('getReadingProgress error:', error);
-    res.status(500).json({ message: 'Error fetching reading progress', error });
+    res.status(500).json({ success: false, message: 'Error fetching reading progress', error });
   }
 };

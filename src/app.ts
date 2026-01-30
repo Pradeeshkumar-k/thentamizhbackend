@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import compression from 'compression';
 
 dotenv.config();
 
@@ -12,6 +13,8 @@ import readingRoutes from './routes/readingRoutes';
 import adminRoutes from './routes/adminRoutes';
 
 const app = express();
+
+app.use(compression());
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -49,39 +52,10 @@ app.use('/api/comments', commentRoutes);
 app.use('/api/reading', readingRoutes);
 app.use('/api/admin', adminRoutes);
 
-app.get('/api/health', checkHealth); // New Debug Route
+app.get('/api/health', checkHealth); 
 
-import prisma from './utils/prisma';
-
-app.get('/api/debug-db', async (req, res) => {
-  try {
-    console.log('Testing DB Access...');
-    const userCount = await prisma.user.count();
-    res.json({ 
-      status: 'success', 
-      message: 'Database connection successful', 
-      stats: { userCount },
-      env: {
-        db_url_configured: !!process.env.DATABASE_URL,
-        node_env: process.env.NODE_ENV
-      }
-    });
-  } catch (error: any) {
-    console.error('DB Debug Error:', error);
-    res.status(500).json({ 
-      status: 'error', 
-      message: 'Database connection failed', 
-      error_name: error.name,
-      error_message: error.message,
-      error_code: error.code,
-      meta: error.meta,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
-  }
-});
-
-app.get('/api/ping', (req, res) => {
-  res.json({ pong: true, time: new Date().toISOString(), version: 'v2-debug' });
+app.get('/', (req, res) => {
+  res.send('Novel Platform Backend is running!');
 });
 
 app.get('/', (req, res) => {

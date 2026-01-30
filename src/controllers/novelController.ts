@@ -47,69 +47,58 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
     }
 
     const skip = (Number(page) - 1) * Number(limit);
-    // console.log(`[getNovels] Querying DB: take=${limit} skip=${skip}`);
 
-    // console.time("db_findMany_novels");
-    const novels = await prisma.novel.findMany({
+    // Parallelize findMany and count for performance
+    const [novels, total] = await Promise.all([
+      prisma.novel.findMany({
         where,
         take: Number(limit),
         skip,
         select: {
-             id: true,
-             title: true,
-             titleEn: true, 
-             genre: true,
-             status: true,
-             coverImageUrl: true,
-             views: true,
-             createdAt: true,
-             updatedAt: true,
-             author: { select: { name: true, email: true } },
-             _count: { select: { chapters: true } } 
+          id: true,
+          title: true,
+          titleEn: true, 
+          genre: true,
+          status: true,
+          coverImageUrl: true,
+          views: true,
+          createdAt: true,
+          updatedAt: true,
+          author: { select: { name: true, email: true } },
+          _count: { select: { chapters: true } } 
         },
         orderBy: { createdAt: 'desc' } 
-      });
-    // console.timeEnd("db_findMany_novels");
-    // console.log(`[getNovels] DB returned ${novels.length} Items`);
+      }),
+      prisma.novel.count({ where })
+    ]);
 
-    // Removed Total Count Query for Speed
-    const total = 100; 
-
-    // Map to frontend expected format
-    const formattedNovels = novels.map(novel => ({
-      _id: novel.id,
+    const formattedNovels = novels.map((novel: any) => ({
       id: novel.id,
       title: novel.title,
-      titleEn: novel.titleEn, // Include titleEn
-      // description: novel.description, // Removed
+      titleEn: novel.titleEn,
       genre: novel.genre,
       status: novel.status,
       coverImage: novel.coverImageUrl,
       author: novel.author?.name || novel.author?.email?.split('@')[0] || 'Unknown',
       totalChapters: novel._count?.chapters || 0,
-      stats: {
-        views: novel.views,
-        likes: 0, 
-        bookmarks: 0
-      },
+      stats: { views: novel.views },
       createdAt: novel.createdAt,
       updatedAt: novel.updatedAt
     }));
 
-    // Set Cache (if no search)
     if (!search) {
-        novelListCache = {
-            data: formattedNovels,
-            timestamp: Date.now()
-        };
-       console.log('[getNovels] Cache Updated');
+      novelListCache = { data: formattedNovels, timestamp: Date.now() };
     }
 
     res.json({
-      novels: formattedNovels,
-      total,
-      page: Number(page),
-      limit: Number(limit)
+      success: true,
+      data: formattedNovels,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit))
+      }
     });
   } catch (error: any) {
     console.error('ANTIGRAVITY_DEBUG_ERROR [getNovels]:', error);
@@ -146,7 +135,7 @@ export const warmUpCache = async () => {
             orderBy: { createdAt: 'desc' } 
         });
 
-        const formattedNovels = novels.map(novel => ({
+        const formattedNovels = novels.map((novel: any) => ({
             _id: novel.id,
             id: novel.id,
             title: novel.title,
@@ -539,7 +528,7 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
     });
 
     // Map to frontend expected format
-    const formattedChapters = chapters.map(ch => ({
+    const formattedChapters = chapters.map((ch: any) => ({
       _id: ch.id,
       id: ch.id,
       novelId: id,
