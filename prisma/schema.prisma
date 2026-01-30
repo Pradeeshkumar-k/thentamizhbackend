@@ -57,6 +57,10 @@ model Novel {
   bookmarks         Bookmark[]
   likes             NovelLike[]
   readingProgresses ReadingProgress[]
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([authorId])
 }
 
 model Chapter {
@@ -76,7 +80,10 @@ model Chapter {
 
   comments          Comment[]
   likes             Like[]
+
   readingProgresses ReadingProgress[]
+
+  @@index([novelId, order])
 }
 
 model Bookmark {

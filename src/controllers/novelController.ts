@@ -17,8 +17,8 @@ export const invalidateNovelCache = () => {
 // Public: Get all novels
 export const getNovels = async (req: Request, res: Response): Promise<void> => {
   const { page = 1, limit = 10, search, sort } = req.query;
-  console.log(`[getNovels] Request: page=${page} limit=${limit} search=${search}`);
-  console.log('[getNovels] Fix Applied: Safe Author Access');
+  // console.log(`[getNovels] Request: page=${page} limit=${limit} search=${search}`);
+  // console.log('[getNovels] Fix Applied: Safe Author Access');
   
   try {
     const where: any = {};
@@ -31,7 +31,7 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
 
     // Optimization: Check Cache (Only if no search filters)
     if (!search && novelListCache && (Date.now() - novelListCache.timestamp < CACHE_TTL)) {
-       console.log('[getNovels] Serving from Cache ⚡');
+       // console.log('[getNovels] Serving from Cache ⚡');
        const cachedNovels = novelListCache.data;
        res.json({
           novels: cachedNovels,
@@ -43,9 +43,9 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
     }
 
     const skip = (Number(page) - 1) * Number(limit);
-    console.log(`[getNovels] Querying DB: take=${limit} skip=${skip}`);
+    // console.log(`[getNovels] Querying DB: take=${limit} skip=${skip}`);
 
-    console.time("db_findMany_novels");
+    // console.time("db_findMany_novels");
     const novels = await prisma.novel.findMany({
         where,
         take: Number(limit),
@@ -65,8 +65,8 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
         },
         orderBy: { createdAt: 'desc' } 
       });
-    console.timeEnd("db_findMany_novels");
-    console.log(`[getNovels] DB returned ${novels.length} Items`);
+    // console.timeEnd("db_findMany_novels");
+    // console.log(`[getNovels] DB returned ${novels.length} Items`);
 
     // Removed Total Count Query for Speed
     const total = 100; 

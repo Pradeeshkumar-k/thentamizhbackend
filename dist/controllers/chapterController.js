@@ -10,7 +10,7 @@ const translationService_1 = require("../services/translationService");
 const getChapterById = async (req, res) => {
     const { id } = req.params;
     const { lang } = req.query; // Check for language query param
-    console.log(`[getChapterById] ID: ${id}, Lang: ${lang}`);
+    // console.log(`[getChapterById] ID: ${id}, Lang: ${lang}`);
     // Cache Key: id + lang
     const cacheKey = `chapter_${id}_${lang || 'default'}`;
     // Simple In-Memory Cache for Chapters
@@ -24,7 +24,7 @@ const getChapterById = async (req, res) => {
         // 1. Check Cache
         const cached = chapterCache.get(cacheKey);
         if (cached && (Date.now() - cached.timestamp < CHAPTER_CACHE_TTL)) {
-            console.log(`[getChapterById] Serving ${id} from Cache ⚡`);
+            // console.log(`[getChapterById] Serving ${id} from Cache ⚡`);
             // Async View Increment
             prisma_1.default.chapter.update({
                 where: { id },
@@ -54,7 +54,7 @@ const getChapterById = async (req, res) => {
         }
         // Lazy Translation Logic
         if (lang === 'english') {
-            console.log(`[getChapterById] English requested. ContentEn present: ${!!chapter.contentEn}`);
+            // console.log(`[getChapterById] English requested. ContentEn present: ${!!(chapter as any).contentEn}`);
             let needsUpdate = false;
             const updates = {};
             const translationTasks = [];
@@ -65,7 +65,7 @@ const getChapterById = async (req, res) => {
             }
             if (!chapter.contentEn && chapter.content) {
                 const start = Date.now();
-                console.log('[getChapterById] Hybrid Translation Mode: Fetching preview...');
+                // console.log('[getChapterById] Hybrid Translation Mode: Fetching preview...');
                 // 1. Immediate Priority: Translate visible first chunk (Title + First ~2000 chars)
                 const PREVIEW_LENGTH = 2000;
                 const previewText = chapter.content.substring(0, PREVIEW_LENGTH);

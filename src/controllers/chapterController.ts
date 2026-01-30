@@ -7,7 +7,7 @@ import { TranslationService } from '../services/translationService';
 export const getChapterById = async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
   const { lang } = req.query; // Check for language query param
-  console.log(`[getChapterById] ID: ${id}, Lang: ${lang}`);
+  // console.log(`[getChapterById] ID: ${id}, Lang: ${lang}`);
 
   // Cache Key: id + lang
   const cacheKey = `chapter_${id}_${lang || 'default'}`;
@@ -24,7 +24,7 @@ export const getChapterById = async (req: Request, res: Response): Promise<void>
     // 1. Check Cache
     const cached = chapterCache.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp < CHAPTER_CACHE_TTL)) {
-       console.log(`[getChapterById] Serving ${id} from Cache ⚡`);
+       // console.log(`[getChapterById] Serving ${id} from Cache ⚡`);
        // Async View Increment
        prisma.chapter.update({
           where: { id },
@@ -58,7 +58,7 @@ export const getChapterById = async (req: Request, res: Response): Promise<void>
 
     // Lazy Translation Logic
     if (lang === 'english') {
-      console.log(`[getChapterById] English requested. ContentEn present: ${!!(chapter as any).contentEn}`);
+      // console.log(`[getChapterById] English requested. ContentEn present: ${!!(chapter as any).contentEn}`);
       let needsUpdate = false;
       const updates: any = {};
       
@@ -75,7 +75,7 @@ export const getChapterById = async (req: Request, res: Response): Promise<void>
       if (!(chapter as any).contentEn && chapter.content) {
          
          const start = Date.now();
-         console.log('[getChapterById] Hybrid Translation Mode: Fetching preview...');
+         // console.log('[getChapterById] Hybrid Translation Mode: Fetching preview...');
 
          // 1. Immediate Priority: Translate visible first chunk (Title + First ~2000 chars)
          const PREVIEW_LENGTH = 2000;

@@ -18,8 +18,8 @@ exports.invalidateNovelCache = invalidateNovelCache;
 // Public: Get all novels
 const getNovels = async (req, res) => {
     const { page = 1, limit = 10, search, sort } = req.query;
-    console.log(`[getNovels] Request: page=${page} limit=${limit} search=${search}`);
-    console.log('[getNovels] Fix Applied: Safe Author Access');
+    // console.log(`[getNovels] Request: page=${page} limit=${limit} search=${search}`);
+    // console.log('[getNovels] Fix Applied: Safe Author Access');
     try {
         const where = {};
         if (search) {
@@ -30,7 +30,7 @@ const getNovels = async (req, res) => {
         }
         // Optimization: Check Cache (Only if no search filters)
         if (!search && novelListCache && (Date.now() - novelListCache.timestamp < CACHE_TTL)) {
-            console.log('[getNovels] Serving from Cache ⚡');
+            // console.log('[getNovels] Serving from Cache ⚡');
             const cachedNovels = novelListCache.data;
             res.json({
                 novels: cachedNovels,
@@ -41,8 +41,8 @@ const getNovels = async (req, res) => {
             return;
         }
         const skip = (Number(page) - 1) * Number(limit);
-        console.log(`[getNovels] Querying DB: take=${limit} skip=${skip}`);
-        console.time("db_findMany_novels");
+        // console.log(`[getNovels] Querying DB: take=${limit} skip=${skip}`);
+        // console.time("db_findMany_novels");
         const novels = await prisma_1.default.novel.findMany({
             where,
             take: Number(limit),
@@ -62,8 +62,8 @@ const getNovels = async (req, res) => {
             },
             orderBy: { createdAt: 'desc' }
         });
-        console.timeEnd("db_findMany_novels");
-        console.log(`[getNovels] DB returned ${novels.length} Items`);
+        // console.timeEnd("db_findMany_novels");
+        // console.log(`[getNovels] DB returned ${novels.length} Items`);
         // Removed Total Count Query for Speed
         const total = 100;
         // Map to frontend expected format
@@ -244,9 +244,17 @@ const getNovelById = async (req, res) => {
             if (lang === 'english') {
                 let updates = {};
                 let needsUpdate = false;
+                // Helper for Timeout
+                const promiseWithTimeout = (promise, ms, fallback) => {
+                    return Promise.race([
+                        promise,
+                        new Promise((resolve) => setTimeout(() => resolve(fallback), ms))
+                    ]);
+                };
                 if (!novel.titleEn && novel.title) {
                     try {
-                        const translatedTitle = await translationService_1.TranslationService.translateTextOrNull(novel.title);
+                        // Timeout set to 2000ms (2 seconds) to prevent hanging
+                        const translatedTitle = await promiseWithTimeout(translationService_1.TranslationService.translateTextOrNull(novel.title), 2000, null);
                         if (translatedTitle) {
                             updates.titleEn = translatedTitle;
                             novel.titleEn = translatedTitle; // Update local object
@@ -259,7 +267,7 @@ const getNovelById = async (req, res) => {
                 }
                 if (!novel.descriptionEn && novel.description) {
                     try {
-                        const translatedDesc = await translationService_1.TranslationService.translateTextOrNull(novel.description);
+                        const translatedDesc = await promiseWithTimeout(translationService_1.TranslationService.translateTextOrNull(novel.description), 2000, null);
                         if (translatedDesc) {
                             updates.descriptionEn = translatedDesc;
                             novel.descriptionEn = translatedDesc; // Update local object
