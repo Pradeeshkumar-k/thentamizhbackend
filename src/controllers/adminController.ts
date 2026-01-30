@@ -355,6 +355,12 @@ export const createChapter = async (req: AuthRequest, res: Response): Promise<vo
     const finalThumbnailUrl = thumbnailUrl || thumbnail || '';
     const finalTitle = title || name || `Chapter ${finalOrder}`;
 
+    // Safeguard: Prevent operations on legacy numeric IDs that crash Prisma
+    if (novelId && ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].includes(String(novelId))) {
+       res.status(400).json({ success: false, error: 'Legacy numeric IDs are read-only. Please use UUID novels.' });
+       return;
+    }
+
     const chapter = await prisma.chapter.create({
       data: {
         novelId,
@@ -370,9 +376,15 @@ export const createChapter = async (req: AuthRequest, res: Response): Promise<vo
       data: chapter,
       message: 'Chapter created successfully'
     });
-  } catch (error) {
-    console.error('Create chapter error:', error);
-    res.status(500).json({ message: 'Error creating chapter', error });
+  } catch (error: any) {
+    console.error('--- Admin Create Chapter ERROR ---');
+    console.error('Data:', { novelId: req.params.novelId, body: req.body });
+    console.error(error);
+    res.status(500).json({ 
+        message: 'Error creating chapter', 
+        error_message: error.message,
+        error_code: error.code
+    });
   }
 };
 

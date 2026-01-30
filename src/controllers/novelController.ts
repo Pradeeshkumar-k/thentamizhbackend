@@ -275,7 +275,7 @@ const promiseWithTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Pr
                     // Timeout set to 2000ms (2 seconds) to prevent hanging
                     const translatedTitle = await promiseWithTimeout(
                         TranslationService.translateTextOrNull(novel.title),
-                        2000,
+                        15000,
                         null
                     );
                     if (translatedTitle) {
@@ -292,7 +292,7 @@ const promiseWithTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Pr
                 try {
                     const translatedDesc = await promiseWithTimeout(
                          TranslationService.translateTextOrNull(novel.description),
-                         2000,
+                         15000,
                          null
                     );
                     if (translatedDesc) {
