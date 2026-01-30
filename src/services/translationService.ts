@@ -1,14 +1,9 @@
 import { OpenAI } from 'openai';
 import { translate } from 'google-translate-api-x';
 import dotenv from 'dotenv';
-import fs from 'fs';
-import path from 'path';
 
-const logFile = path.join(__dirname, '../../translation_debug.log');
 const log = (msg: string) => {
-  const entry = `[${new Date().toISOString()}] ${msg}\n`;
-  fs.appendFileSync(logFile, entry);
-  console.log(msg);
+  console.log(`[Translation] ${msg}`);
 };
 
 dotenv.config();
@@ -49,14 +44,14 @@ export const translateContent = async (text: string, to: string = 'en'): Promise
         return translated.trim();
       }
     } catch (openaiError: any) {
-      log(`OpenAI Error Details: ${openaiError?.message || openaiError}`);
+      log(`OpenAI Error: ${openaiError?.message || openaiError}. Code: ${openaiError?.code || 'N/A'}`);
       // Fall through to Google fallback
     }
   }
 
   // 2. Fallback to Google Translate (Free/Standard)
   try {
-    log('Falling back to Google Translate...');
+    log(`Falling back to Google Translate for text: ${text.substring(0, 30)}...`);
     const res = await translate(text, { 
       to, 
       forceBatch: false, 
@@ -65,8 +60,9 @@ export const translateContent = async (text: string, to: string = 'en'): Promise
     log('Google Translation Success');
     return res.text;
   } catch (googleError: any) {
-    log(`Google Translation Error: ${googleError?.message || googleError}`);
-    throw new Error('Translation failed in both AI and Standard modes.');
+    const errorMsg = googleError?.message || googleError;
+    log(`Google Translation Error: ${errorMsg}`);
+    throw new Error(`Translation failed. OpenAI key: ${!!openai}. Google Error: ${errorMsg}`);
   }
 };
 

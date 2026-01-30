@@ -523,12 +523,14 @@ export const translateContent = async (req: AuthRequest, res: Response): Promise
       }
     });
   } catch (error: any) {
-    console.error('--- Translation ERROR ---');
-    console.error(error);
+    console.error('--- Translation ERROR Details ---');
+    console.error('Text:', req.body.text?.substring(0, 100));
+    console.error('Error:', error);
     res.status(500).json({ 
       success: false, 
       error: 'Failed to translate content',
-      details: error.message 
+      message: error.message,
+      details: error.stack?.substring(0, 200)
     });
   }
 };
