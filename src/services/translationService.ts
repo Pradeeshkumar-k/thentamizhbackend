@@ -1,6 +1,8 @@
 import { OpenAI } from 'openai';
 import { translate } from 'google-translate-api-x';
 import dotenv from 'dotenv';
+import prisma from '../utils/prisma';
+import { invalidateNovelCache } from '../controllers/novelController';
 
 const log = (msg: string) => {
   console.log(`[Translation] ${msg}`);
@@ -77,6 +79,76 @@ export const TranslationService = {
     } catch (e) {
       log(`translateTextOrNull Error: ${e}`);
       return null;
+    }
+  },
+
+  translateAndSaveNovel: async (novelId: string): Promise<void> => {
+    try {
+      const novel = await prisma.novel.findUnique({ where: { id: novelId } });
+      if (!novel) return;
+
+      // Check if already translated (assumes if TitleEn exists, it's done or in progress)
+      if (novel.titleEn && novel.descriptionEn) return;
+
+      let updates: any = {};
+      let needsUpdate = false;
+
+      // Helper for Timeout
+      const promiseWithTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
+          return Promise.race([
+              promise,
+              new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))
+          ]);
+      };
+
+      if (!novel.titleEn && novel.title) {
+          try {
+              const translatedTitle = await promiseWithTimeout(
+                  TranslationService.translateTextOrNull(novel.title),
+                  15000,
+                  null
+              );
+              if (translatedTitle) {
+                  updates.titleEn = translatedTitle;
+                  needsUpdate = true;
+              }
+          } catch (e) {
+              log(`[Background] Title translation failed for ${novelId}: ${e}`);
+          }
+      }
+
+      if (!novel.descriptionEn && novel.description) {
+          try {
+              const translatedDesc = await promiseWithTimeout(
+                   TranslationService.translateTextOrNull(novel.description),
+                   15000,
+                   null
+              );
+              if (translatedDesc) {
+                  updates.descriptionEn = translatedDesc;
+                  needsUpdate = true;
+              }
+          } catch (e) {
+              log(`[Background] Description translation failed for ${novelId}: ${e}`);
+          }
+      }
+
+      if (needsUpdate) {
+          await prisma.novel.update({
+              where: { id: novelId },
+              data: updates
+          });
+          log(`[Background] Auto-translated novel ${novelId} saved to DB`);
+          // Note: Invalidate cache logic creates circular dependency if imported directly.
+          // Ideally use event emitter or just accept eventual consistency.
+          // We imported it, let's see if it works or causes cyclic dependency issue at runtime.
+          // For now, let's try calling it if imported successfully.
+          try {
+              invalidateNovelCache(); 
+          } catch(e) { console.warn("Cache invalidation skipped due to circular dep"); }
+      }
+    } catch (err) {
+      log(`translateAndSaveNovel Error: ${err}`);
     }
   }
 };

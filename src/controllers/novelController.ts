@@ -266,63 +266,10 @@ export const getNovelById = async (req: Request, res: Response): Promise<void> =
         // The original file is HUGE. 
         // Let's just do the formatting:
         
-        // Auto-Translation Logic
-        if (lang === 'english') {
-            let updates: any = {};
-            let needsUpdate = false;
-
-// Helper for Timeout
-const promiseWithTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
-    return Promise.race([
-        promise,
-        new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))
-    ]);
-};
-
-            if (!novel.titleEn && novel.title) {
-                try {
-                    // Timeout set to 2000ms (2 seconds) to prevent hanging
-                    const translatedTitle = await promiseWithTimeout(
-                        TranslationService.translateTextOrNull(novel.title),
-                        15000,
-                        null
-                    );
-                    if (translatedTitle) {
-                        updates.titleEn = translatedTitle;
-                        (novel as any).titleEn = translatedTitle; // Update local object
-                        needsUpdate = true;
-                    }
-                } catch (e) {
-                    console.error("Title translation failed", e);
-                }
-            }
-
-            if (!novel.descriptionEn && novel.description) {
-                try {
-                    const translatedDesc = await promiseWithTimeout(
-                         TranslationService.translateTextOrNull(novel.description),
-                         15000,
-                         null
-                    );
-                    if (translatedDesc) {
-                        updates.descriptionEn = translatedDesc;
-                        (novel as any).descriptionEn = translatedDesc; // Update local object
-                        needsUpdate = true;
-                    }
-                } catch (e) {
-                    console.error("Description translation failed", e);
-                }
-            }
-
-            if (needsUpdate) {
-                // Async update to DB
-                await prisma.novel.update({
-                    where: { id },
-                    data: updates
-                });
-                console.log(`[getNovelById] Auto-translated novel ${id}`);
-                invalidateNovelCache(); // Invalidate list cache so home page sees new titles
-            }
+        // Auto-Translation Logic (Background / Fire-and-Forget)
+        if (lang === 'english' && (!novel.titleEn || !novel.descriptionEn)) {
+            TranslationService.translateAndSaveNovel(id)
+                .catch(err => console.error("[Background] Translation trigger failed:", err));
         }
 
         const n = novel as any;
