@@ -221,6 +221,7 @@ export const updateChapter = async (req: Request, res: Response) => {
 };
 
 // Admin: Delete chapter
+// Admin: Delete chapter
 export const deleteChapter = async (req: Request, res: Response) => {
   const { id } = req.params as { id: string };
   try {
@@ -230,9 +231,20 @@ export const deleteChapter = async (req: Request, res: Response) => {
       return;
     }
 
-    await prisma.chapter.delete({ where: { id } });
+    // Manual Cascade Delete (Robust against missing DB Foreign Keys)
+    await prisma.$transaction(async (tx) => {
+        // 1. Delete Dependencies
+        await tx.comment.deleteMany({ where: { chapterId: id } });
+        await tx.like.deleteMany({ where: { chapterId: id } });
+        await tx.readingProgress.deleteMany({ where: { chapterId: id } });
+
+        // 2. Delete Chapter
+        await tx.chapter.delete({ where: { id } });
+    });
+
     res.json({ message: 'Chapter deleted successfully' });
   } catch (error) {
+    console.error("DELETE CHAPTER ERROR:", error);
     res.status(500).json({ message: 'Error deleting chapter', error: (error as any).message });
   }
 };
