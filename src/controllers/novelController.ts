@@ -454,6 +454,7 @@ export const deleteNovel = async (req: Request, res: Response) => {
     
     res.json({ message: 'Novel deleted successfully' });
   } catch (error: any) {
+    console.error("DELETE NOVEL ERROR:", error);
     res.status(500).json({ message: 'Error deleting novel', error: error.message });
   }
 };
