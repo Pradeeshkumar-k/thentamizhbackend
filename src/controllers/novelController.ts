@@ -22,11 +22,8 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
   // console.log('[getNovels] Fix Applied: Safe Author Access');
   
   try {
-    // Add Cache-Control for Vercel Edge Caching
-    res.setHeader(
-      "Cache-Control",
-      "public, s-maxage=60, stale-while-revalidate=300"
-    );
+    // Fix 3 (Cache): Use no-store to prevent stale data on home page (Edge/Memory cache issues)
+    res.setHeader('Cache-Control', 'no-store');
 
     const where: any = {};
     if (search) {
@@ -40,18 +37,8 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
     // We only want UUID-like strings (usually 36 chars) or at least not single digits
     where.id = { notIn: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'] };
 
-    // Optimization: Check Cache (Only if no search filters)
-    if (!search && novelListCache && (Date.now() - novelListCache.timestamp < CACHE_TTL)) {
-       // console.log('[getNovels] Serving from Cache ⚡');
-       const cachedNovels = novelListCache.data;
-       res.json({
-          novels: cachedNovels,
-          total: 100, // Dummy
-          page: Number(page),
-          limit: Number(limit)
-       });
-       return;
-    }
+    // OPTIMIZATION DISABLED: Always fetch fresh data to prevent deleted items from appearing
+    // if (!search && novelListCache && (Date.now() - novelListCache.timestamp < CACHE_TTL)) { ... }
 
     const skip = (Number(page) - 1) * Number(limit);
 
