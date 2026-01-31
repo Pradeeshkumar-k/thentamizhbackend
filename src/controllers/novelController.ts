@@ -86,9 +86,10 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
       updatedAt: novel.updatedAt
     }));
 
-    if (!search) {
-      novelListCache = { data: formattedNovels, timestamp: Date.now() };
-    }
+    // CACHE DISABLED: Prevent stale data on home page after deletion
+    // if (!search) {
+    //   novelListCache = { data: formattedNovels, timestamp: Date.now() };
+    // }
 
     res.json({
       novels: formattedNovels,
