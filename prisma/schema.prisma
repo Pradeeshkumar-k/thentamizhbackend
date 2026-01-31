@@ -46,7 +46,6 @@ model Novel {
   status        NovelStatus @default(DRAFT)
   titleEn       String?
   descriptionEn String?
-  translationStatus String @default("PENDING") // PENDING, IN_PROGRESS, DONE
   views         Int         @default(0)
   coverImageUrl String?
   authorId      String

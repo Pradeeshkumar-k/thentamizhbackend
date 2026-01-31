@@ -245,20 +245,16 @@ export const getNovelById = async (req: Request, res: Response): Promise<void> =
           return;
         }
 
-        // Translation Logic (DISABLED FOR DEBUGGING)
-        /*
+        // Auto-Translation Logic (Background / Fire-and-Forget)
         if (lang === 'english' && (!novel.titleEn || !novel.descriptionEn)) {
             try {
-                Promise.resolve(
-                  TranslationService.translateAndSaveNovel(id)
-                ).catch(err => {
-                  console.error("[Background Translation Error]", err);
-                });
+                // Fire and forget
+                Promise.resolve(TranslationService.translateAndSaveNovel(id))
+                    .catch(err => console.error("[Background] Translation trigger failed:", err));
             } catch (err) {
-                console.error("[Translation Trigger Sync Crash]", err);
+                console.error("[Translation Trigger Crash]", err);
             }
         }
-        */
 
         const n = novel as any;
         formattedNovel = {
