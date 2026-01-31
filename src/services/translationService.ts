@@ -84,11 +84,23 @@ export const TranslationService = {
 
   translateAndSaveNovel: async (novelId: string): Promise<void> => {
     try {
+      // 1. Check & Lock (Atomic-ish check)
       const novel = await prisma.novel.findUnique({ where: { id: novelId } });
       if (!novel) return;
 
-      // Check if already translated (assumes if TitleEn exists, it's done or in progress)
-      if (novel.titleEn && novel.descriptionEn) return;
+      // If already done or in progress, skip
+      // @ts-ignore: 'translationStatus' might not be in generated client yet until `prisma generate`
+      if (novel.translationStatus === 'IN_PROGRESS' || novel.translationStatus === 'DONE') {
+          // console.log(`[Background] Novel ${novelId} translation already in progress or done.`);
+          return;
+      }
+      
+      // If we are here, status is likely PENDING (or null/draft if old data)
+      // Lock it now
+      await prisma.novel.update({
+          where: { id: novelId },
+          data: { translationStatus: 'IN_PROGRESS' } as any 
+      });
 
       let updates: any = {};
       let needsUpdate = false;
@@ -133,22 +145,35 @@ export const TranslationService = {
           }
       }
 
+      // Finish Up
       if (needsUpdate) {
+          updates.translationStatus = 'DONE';
           await prisma.novel.update({
               where: { id: novelId },
               data: updates
           });
-          log(`[Background] Auto-translated novel ${novelId} saved to DB`);
-          // Note: Invalidate cache logic creates circular dependency if imported directly.
-          // Ideally use event emitter or just accept eventual consistency.
-          // We imported it, let's see if it works or causes cyclic dependency issue at runtime.
-          // For now, let's try calling it if imported successfully.
+          log(`[Background] Auto-translated novel ${novelId} DONE and saved.`);
+          
           try {
               invalidateNovelCache(); 
-          } catch(e) { console.warn("Cache invalidation skipped due to circular dep"); }
+          } catch(e) { /* ignore circular dep warning */ }
+      } else {
+          // If no updates needed (already had data?), just mark DONE
+          await prisma.novel.update({
+              where: { id: novelId },
+              data: { translationStatus: 'DONE' } as any
+          });
       }
+
     } catch (err) {
       log(`translateAndSaveNovel Error: ${err}`);
+      // Unlock on error so it can be retried
+      try {
+          await prisma.novel.update({
+              where: { id: novelId },
+              data: { translationStatus: 'PENDING' } as any
+          });
+      } catch (e) { /* ignore */ }
     }
   }
 };

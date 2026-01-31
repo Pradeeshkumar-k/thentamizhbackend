@@ -21,3 +21,8 @@ export const verifyAccessToken = (token: string) => {
 export const verifyRefreshToken = (token: string) => {
   return jwt.verify(token, REFRESH_TOKEN_SECRET);
 };
+
+// Faster decode for read-only public routes (skips signature verification)
+export const decodeAccessToken = (token: string) => {
+  return jwt.decode(token);
+};

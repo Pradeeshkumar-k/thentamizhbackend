@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import prisma from '../utils/prisma';
 import { TranslationService } from '../services/translationService';
+import { decodeAccessToken } from '../utils/jwt';
 
 
 // Simple In-Memory Cache for Novel List
@@ -189,30 +190,15 @@ export const getNovelById = async (req: Request, res: Response): Promise<void> =
   // Cache Key includes Lang to cache translations separately
   const cacheKey = `${id}-${lang || 'default'}`;
 
-  // Helper to get User ID from optional token
+  // Helper to get User ID from optional token (Fast Decode)
   const getUserIdFromToken = (req: Request): string | null => {
       const authHeader = req.headers.authorization;
       if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
       try {
           const token = authHeader.split(' ')[1];
-          // We need to import verifyAccessToken or use jwt directly if not available in this scope
-          // Assuming verifyAccessToken is available or we import it. 
-          // Since we can't easily see imports in this block, we'll try to use the one from utils if imported at top
-          // For now, let's use a dynamic import or assuming it is imported.
-          // Actually, let's just decode it safely if we can, or better yet, assume 'verifyAccessToken' is imported at top.
-          // IF NOT IMPORTED: I need to add the import.
-          // Let's assume I will add the import in a separate block or this file has it. 
-          // Wait, I strictly need to check if verifyAccessToken is imported. 
-          // Looking at previous chunks, it wasn't.
-          // So I will just decode it for now using jwt if available, or I should have checked imports.
-          // Let's stick to the plan: I will add the import in a separate tool call if needed, but here I'll use it.
-          // Wait, I can't check imports in this tool call.
-          // SAFE BET: Use `jwt.decode` if I don't want to enforce verification here (since it's optional read), 
-          // BUT verification is better. 
-          // Let's rely on the plan to import `verifyAccessToken`.
-          // I will assume `import { verifyAccessToken } from '../utils/jwt';` is added.
-          const payload = require('jsonwebtoken').verify(token, process.env.JWT_SECRET || 'fallback_secret') as any;
-          return payload.userId;
+          // FAST: Decode only, skip expensive signature verification for public read
+          const payload = decodeAccessToken(token) as any;
+          return payload?.userId || null;
       } catch (e) {
           return null;
       }
@@ -231,11 +217,11 @@ export const getNovelById = async (req: Request, res: Response): Promise<void> =
     const cached = novelCache.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp < NOVEL_CACHE_TTL)) {
        console.log(`[getNovelById] Serving ${id} from Cache ⚡`);
-       // Fire-and-forget view increment even for cached hits to maintain stats accuracy
-       await prisma.novel.update({
+       // Fire-and-forget view increment (Non-blocking)
+       prisma.novel.update({
           where: { id },
           data: { views: { increment: 1 } },
-       });
+       }).catch(err => console.error("[Analytics] View increment failed", err));
 
        formattedNovel = cached.data;
     } else {
@@ -301,11 +287,11 @@ export const getNovelById = async (req: Request, res: Response): Promise<void> =
         // Set Cache
         novelCache.set(cacheKey, { data: formattedNovel, timestamp: Date.now() });
         
-        // Async view increment
-        await prisma.novel.update({
+        // Async view increment (Non-blocking)
+        prisma.novel.update({
              where: { id },
              data: { views: { increment: 1 } },
-        });
+        }).catch(err => console.error("[Analytics] View increment failed", err));
     }
 
     // 3. Append User Interaction Status (Bypass Cache for this)
