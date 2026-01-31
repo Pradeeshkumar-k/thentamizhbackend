@@ -254,8 +254,12 @@ export const getNovelById = async (req: Request, res: Response): Promise<void> =
         
         // Auto-Translation Logic (Background / Fire-and-Forget)
         if (lang === 'english' && (!novel.titleEn || !novel.descriptionEn)) {
-            TranslationService.translateAndSaveNovel(id)
-                .catch(err => console.error("[Background] Translation trigger failed:", err));
+            try {
+                TranslationService.translateAndSaveNovel(id)
+                    .catch(err => console.error("[Background] Translation trigger failed:", err));
+            } catch (err) {
+                console.error("[Translation Trigger Crash]", err);
+            }
         }
 
         const n = novel as any;
