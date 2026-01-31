@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import prisma from '../utils/prisma';
 import { translateContent as performTranslation } from '../services/translationService';
@@ -261,54 +261,48 @@ export const updateNovel = async (req: AuthRequest, res: Response): Promise<void
 
 
 export const deleteNovel = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params as { id: string };
+  const { id } = req.params as any;
 
   try {
-    // Respond early (important) to prevent UI timeout
-    res.status(202).json({ success: true, message: "Deletion processing in background" });
+    // Perform deletion synchronously to ensure completion in serverless environments
+    await prisma.$transaction(async (tx: any) => {
+        // 1. Delete Novel Dependencies
+        await tx.readingProgress.deleteMany({ where: { novelId: id } });
+        await tx.bookmark.deleteMany({ where: { novelId: id } });
+        await tx.novelLike.deleteMany({ where: { novelId: id } });
 
-    // Run deletion async (fire-and-forget)
-    setImmediate(async () => {
-      try {
-        await prisma.$transaction(async (tx) => {
-             // 1. Delete Novel Dependencies
-             await tx.readingProgress.deleteMany({ where: { novelId: id } });
-             await tx.bookmark.deleteMany({ where: { novelId: id } });
-             await tx.novelLike.deleteMany({ where: { novelId: id } });
-
-             // 2. Find Chapters to delete their dependencies
-             const chapters = await tx.chapter.findMany({ 
-                 where: { novelId: id },
-                 select: { id: true }
-             });
-             const chapterIds = chapters.map(c => c.id);
-
-             if (chapterIds.length > 0) {
-                 // 3. Delete Chapter Dependencies
-                 await tx.comment.deleteMany({ where: { chapterId: { in: chapterIds } } });
-                 await tx.like.deleteMany({ where: { chapterId: { in: chapterIds } } });
-                 await tx.readingProgress.deleteMany({ where: { chapterId: { in: chapterIds } } });
-                 
-                 // 4. Delete Chapters
-                 await tx.chapter.deleteMany({ where: { novelId: id } });
-             }
-
-             // 5. Finally Delete Novel
-             await tx.novel.delete({ where: { id } });
+        // 2. Find Chapters to delete their dependencies
+        const chapters = await tx.chapter.findMany({ 
+            where: { novelId: id },
+            select: { id: true }
         });
+        const chapterIds = chapters.map((c: any) => c.id);
 
-        invalidateNovelCache();
-        console.log(`[DELETE] Novel ${id} removed successfully`);
-      } catch (err) {
-        console.error("[DELETE FAILED]", err);
-      }
+        if (chapterIds.length > 0) {
+            // 3. Delete Chapter Dependencies
+            await tx.comment.deleteMany({ where: { chapterId: { in: chapterIds } } });
+            await tx.like.deleteMany({ where: { chapterId: { in: chapterIds } } });
+            await tx.readingProgress.deleteMany({ where: { chapterId: { in: chapterIds } } });
+            
+            // 4. Delete Chapters
+            await tx.chapter.deleteMany({ where: { novelId: id } });
+        }
+
+        // 5. Finally Delete Novel
+        await tx.novel.delete({ where: { id } });
     });
-  } catch (err: any) {
-    // This catch block only catches synchronous errors before setImmediate
-    console.error("Delete request error:", err);
-    if (!res.headersSent) {
-        res.status(500).json({ message: "Delete initiation failed", error: err.message });
-    }
+
+    invalidateNovelCache();
+    console.log(`[DELETE] Novel ${id} removed successfully`);
+    
+    res.json({
+        success: true, 
+        message: 'Novel deleted successfully' 
+    });
+
+  } catch (error: any) {
+    console.error("Delete request error:", error);
+    res.status(500).json({ message: "Delete failed", error: error.message });
   }
 };
 
