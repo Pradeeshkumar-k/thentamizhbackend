@@ -448,32 +448,30 @@ export const deleteNovel = async (req: Request, res: Response) => {
       return;
     }
 
-    // Manual Cascade Delete (since DB Foreign Keys might not be set up due to failed push)
-    await prisma.$transaction(async (tx) => {
-        // 1. Delete Novel Dependencies
-        await tx.readingProgress.deleteMany({ where: { novelId: id } });
-        await tx.bookmark.deleteMany({ where: { novelId: id } });
-        await tx.novelLike.deleteMany({ where: { novelId: id } });
+    // Manual Cascade Delete (Sequential - No Transaction)
+    // 1. Delete Novel Dependencies
+    await prisma.readingProgress.deleteMany({ where: { novelId: id } });
+    await prisma.bookmark.deleteMany({ where: { novelId: id } });
+    await prisma.novelLike.deleteMany({ where: { novelId: id } });
 
-        // 2. Find Chapters to delete their dependencies
-        const chapters = await tx.chapter.findMany({ 
-            where: { novelId: id },
-            select: { id: true }
-        });
-        const chapterIds = chapters.map(c => c.id);
-
-        if (chapterIds.length > 0) {
-            // 3. Delete Chapter Dependencies
-            await tx.comment.deleteMany({ where: { chapterId: { in: chapterIds } } });
-            await tx.like.deleteMany({ where: { chapterId: { in: chapterIds } } });
-            
-            // 4. Delete Chapters
-            await tx.chapter.deleteMany({ where: { novelId: id } });
-        }
-
-        // 5. Finally Delete Novel
-        await tx.novel.delete({ where: { id } });
+    // 2. Find Chapters to delete their dependencies
+    const chapters = await prisma.chapter.findMany({ 
+        where: { novelId: id },
+        select: { id: true }
     });
+    const chapterIds = chapters.map(c => c.id);
+
+    if (chapterIds.length > 0) {
+        // 3. Delete Chapter Dependencies
+        await prisma.comment.deleteMany({ where: { chapterId: { in: chapterIds } } });
+        await prisma.like.deleteMany({ where: { chapterId: { in: chapterIds } } });
+        
+        // 4. Delete Chapters
+        await prisma.chapter.deleteMany({ where: { novelId: id } });
+    }
+
+    // 5. Finally Delete Novel
+    await prisma.novel.delete({ where: { id } });
     
     // Invalidate Cache
     invalidateNovelCache();
