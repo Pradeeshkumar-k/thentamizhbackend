@@ -264,8 +264,37 @@ export const deleteNovel = async (req: AuthRequest, res: Response): Promise<void
   try {
     const { id } = req.params as { id: string };
 
-    await prisma.novel.delete({
-      where: { id }
+    const existing = await prisma.novel.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ message: 'Novel not found' });
+      return;
+    }
+
+    // Manual Cascade Delete (Robust against missing DB Foreign Keys)
+    await prisma.$transaction(async (tx) => {
+        // 1. Delete Novel Dependencies
+        await tx.readingProgress.deleteMany({ where: { novelId: id } });
+        await tx.bookmark.deleteMany({ where: { novelId: id } });
+        await tx.novelLike.deleteMany({ where: { novelId: id } });
+
+        // 2. Find Chapters to delete their dependencies
+        const chapters = await tx.chapter.findMany({ 
+            where: { novelId: id },
+            select: { id: true }
+        });
+        const chapterIds = chapters.map(c => c.id);
+
+        if (chapterIds.length > 0) {
+            // 3. Delete Chapter Dependencies
+            await tx.comment.deleteMany({ where: { chapterId: { in: chapterIds } } });
+            await tx.like.deleteMany({ where: { chapterId: { in: chapterIds } } });
+            
+            // 4. Delete Chapters
+            await tx.chapter.deleteMany({ where: { novelId: id } });
+        }
+
+        // 5. Finally Delete Novel
+        await tx.novel.delete({ where: { id } });
     });
 
     // Invalidate Cache
@@ -275,8 +304,9 @@ export const deleteNovel = async (req: AuthRequest, res: Response): Promise<void
       success: true,
       message: 'Novel deleted successfully'
     });
-  } catch (error) {
-    res.status(500).json({ message: 'Error deleting novel', error });
+  } catch (error: any) {
+    console.error("ADMIN DELETE NOVEL ERROR:", error);
+    res.status(500).json({ message: 'Error deleting novel', error: error.message });
   }
 };
 
@@ -425,16 +455,30 @@ export const deleteChapter = async (req: AuthRequest, res: Response): Promise<vo
   try {
     const { id } = req.params as { id: string };
 
-    await prisma.chapter.delete({
-      where: { id }
+    const existing = await prisma.chapter.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ message: 'Chapter not found' });
+      return;
+    }
+
+    // Manual Cascade Delete
+    await prisma.$transaction(async (tx) => {
+        // 1. Delete Dependencies
+        await tx.comment.deleteMany({ where: { chapterId: id } });
+        await tx.like.deleteMany({ where: { chapterId: id } });
+        await tx.readingProgress.deleteMany({ where: { chapterId: id } });
+
+        // 2. Delete Chapter
+        await tx.chapter.delete({ where: { id } });
     });
 
     res.json({
       success: true,
       message: 'Chapter deleted successfully'
     });
-  } catch (error) {
-    res.status(500).json({ message: 'Error deleting chapter', error });
+  } catch (error: any) {
+    console.error("ADMIN DELETE CHAPTER ERROR:", error);
+    res.status(500).json({ message: 'Error deleting chapter', error: error.message });
   }
 };
 
