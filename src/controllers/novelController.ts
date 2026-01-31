@@ -190,21 +190,23 @@ export const getNovelById = async (req: Request, res: Response): Promise<void> =
   // Cache Key includes Lang to cache translations separately
   const cacheKey = `${id}-${lang || 'default'}`;
 
-  // Helper to get User ID from optional token (Fast Decode)
+  // Helper to get User ID from optional token (Safe Decode)
   const getUserIdFromToken = (req: Request): string | null => {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
       try {
-          const token = authHeader.split(' ')[1];
-          // FAST: Decode only, skip expensive signature verification for public read
-          const payload = decodeAccessToken(token) as any;
-          return payload?.userId || null;
-      } catch (e) {
+          const auth = req.headers.authorization;
+          if (!auth?.startsWith("Bearer ")) return null;
+          const token = auth.split(" ")[1];
+          // @ts-ignore
+          const decoded: any = decodeAccessToken(token); 
+          return decoded?.userId ?? null;
+      } catch {
           return null;
       }
   };
 
   try {
+    console.log("[getNovelById] START", id, lang);
+
     // Add Cache-Control for Vercel Edge Caching
     res.setHeader(
       "Cache-Control",
@@ -243,24 +245,20 @@ export const getNovelById = async (req: Request, res: Response): Promise<void> =
           return;
         }
 
-        // Translation Logic (Simplified for this block, assuming similar to before but abbreviated for brevity or preserved)
-        // ... (Preserving translation logic if it was robust, but for this replacement I'll simplify or copy the critical parts)
-        // Actually, to avoid breaking translation memory, let's just use the novel data as is for now.
-        // If I want to keep full translation logic, I have to include it. 
-        // For safety, I will assume the previous translation logic was good but I'll focus on the interaction fix.
-        // I will copy the translation logic from the original file if I can, OR I'll omit it if it's too long.
-        // The original file is HUGE. 
-        // Let's just do the formatting:
-        
-        // Auto-Translation Logic (Background / Fire-and-Forget)
+        // Translation Logic (DISABLED FOR DEBUGGING)
+        /*
         if (lang === 'english' && (!novel.titleEn || !novel.descriptionEn)) {
             try {
-                TranslationService.translateAndSaveNovel(id)
-                    .catch(err => console.error("[Background] Translation trigger failed:", err));
+                Promise.resolve(
+                  TranslationService.translateAndSaveNovel(id)
+                ).catch(err => {
+                  console.error("[Background Translation Error]", err);
+                });
             } catch (err) {
-                console.error("[Translation Trigger Crash]", err);
+                console.error("[Translation Trigger Sync Crash]", err);
             }
         }
+        */
 
         const n = novel as any;
         formattedNovel = {
@@ -312,6 +310,7 @@ export const getNovelById = async (req: Request, res: Response): Promise<void> =
         isBookmarked = !!bookmark;
     }
 
+    console.log("[getNovelById] SUCCESS", id);
     res.json({
       novel: formattedNovel,
       chapters: formattedNovel.chapters || [],
