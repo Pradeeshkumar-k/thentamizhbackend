@@ -439,47 +439,53 @@ export const updateNovel = async (req: Request, res: Response) => {
 
 // Admin: Delete novel
 // Admin: Delete novel
+// Admin: Delete novel
 export const deleteNovel = async (req: Request, res: Response) => {
   const id = String(req.params.id);
   try {
-    const existing = await prisma.novel.findUnique({ where: { id } });
-    if (!existing) {
-      res.status(404).json({ message: 'Novel not found' });
-      return;
-    }
+    // Respond early to prevent timeouts
+    res.status(202).json({ message: 'Deletion processing in background' });
 
-    // Manual Cascade Delete (Sequential - No Transaction)
-    // 1. Delete Novel Dependencies
-    await prisma.readingProgress.deleteMany({ where: { novelId: id } });
-    await prisma.bookmark.deleteMany({ where: { novelId: id } });
-    await prisma.novelLike.deleteMany({ where: { novelId: id } });
+    // Run deletion async (fire-and-forget)
+    setImmediate(async () => {
+        try {
+            await prisma.$transaction(async (tx) => {
+                // 1. Delete Novel Dependencies
+                await tx.readingProgress.deleteMany({ where: { novelId: id } });
+                await tx.bookmark.deleteMany({ where: { novelId: id } });
+                await tx.novelLike.deleteMany({ where: { novelId: id } });
 
-    // 2. Find Chapters to delete their dependencies
-    const chapters = await prisma.chapter.findMany({ 
-        where: { novelId: id },
-        select: { id: true }
+                // 2. Find Chapters to delete their dependencies
+                const chapters = await tx.chapter.findMany({ 
+                    where: { novelId: id },
+                    select: { id: true }
+                });
+                const chapterIds = chapters.map(c => c.id);
+
+                if (chapterIds.length > 0) {
+                    // 3. Delete Chapter Dependencies
+                    await tx.comment.deleteMany({ where: { chapterId: { in: chapterIds } } });
+                    await tx.like.deleteMany({ where: { chapterId: { in: chapterIds } } });
+                    await tx.readingProgress.deleteMany({ where: { chapterId: { in: chapterIds } } });
+                    
+                    // 4. Delete Chapters
+                    await tx.chapter.deleteMany({ where: { novelId: id } });
+                }
+
+                // 5. Finally Delete Novel
+                await tx.novel.delete({ where: { id } });
+            });
+
+            invalidateNovelCache();
+            console.log(`[DELETE] Novel ${id} removed successfully`);
+        } catch (err) {
+            console.error("[DELETE FAILED]", err);
+        }
     });
-    const chapterIds = chapters.map(c => c.id);
 
-    if (chapterIds.length > 0) {
-        // 3. Delete Chapter Dependencies
-        await prisma.comment.deleteMany({ where: { chapterId: { in: chapterIds } } });
-        await prisma.like.deleteMany({ where: { chapterId: { in: chapterIds } } });
-        
-        // 4. Delete Chapters
-        await prisma.chapter.deleteMany({ where: { novelId: id } });
-    }
-
-    // 5. Finally Delete Novel
-    await prisma.novel.delete({ where: { id } });
-    
-    // Invalidate Cache
-    invalidateNovelCache();
-    
-    res.json({ message: 'Novel deleted successfully' });
   } catch (error: any) {
     console.error("DELETE NOVEL ERROR:", error);
-    res.status(500).json({ message: 'Error deleting novel', error: error.message });
+    if (!res.headersSent) res.status(500).json({ message: 'Error deleting novel', error: error.message });
   }
 };
 
