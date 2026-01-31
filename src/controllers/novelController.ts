@@ -219,6 +219,12 @@ export const getNovelById = async (req: Request, res: Response): Promise<void> =
   };
 
   try {
+    // Add Cache-Control for Vercel Edge Caching
+    res.setHeader(
+      "Cache-Control",
+      "public, s-maxage=60, stale-while-revalidate=300"
+    );
+
     let formattedNovel: any = null;
 
     // 1. Check Cache
@@ -523,6 +529,12 @@ export const deleteNovel = async (req: Request, res: Response) => {
 // Public: Get chapters for a novel
 export const getChaptersByNovel = async (req: Request, res: Response): Promise<void> => {
   try {
+    // Add Cache-Control for Vercel Edge Caching
+    res.setHeader(
+      "Cache-Control",
+      "public, s-maxage=60, stale-while-revalidate=300"
+    );
+
     const id = String(req.params.id); // Expecting novelId as :id for consistency with other public routes or :novelId
 
     const chapters = await prisma.chapter.findMany({

@@ -21,6 +21,12 @@ export const getChapterById = async (req: Request, res: Response): Promise<void>
   const CHAPTER_CACHE_TTL = 60 * 60 * 1000; // 1 Hour
 
   try {
+    // Add Cache-Control for Vercel Edge Caching
+    res.setHeader(
+      "Cache-Control",
+      "public, s-maxage=60, stale-while-revalidate=300"
+    );
+
     // 1. Check Cache
     const cached = chapterCache.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp < CHAPTER_CACHE_TTL)) {
