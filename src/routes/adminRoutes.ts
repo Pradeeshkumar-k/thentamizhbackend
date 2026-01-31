@@ -15,7 +15,9 @@ import {
   getAllNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
-  translateContent
+  translateContent,
+  listAllDebug,
+  forceDeleteDebug
 } from '../controllers/adminController';
 
 const router = express.Router();
@@ -50,5 +52,11 @@ router.patch('/notifications/:id/read', markNotificationAsRead);
 router.patch('/notifications/read-all', markAllNotificationsAsRead);
 
 // Translation Utility
+router.post('/translate', translateContent);
+
+// DEBUG ROUTES (No Auth for easy testing if needed, or keep Auth)
+// Using Auth for safety, but can be removed if user needs via browser directly
+router.get('/debug/novels', listAllDebug);
+router.get('/debug/delete/:id', forceDeleteDebug);
 
 export default router;

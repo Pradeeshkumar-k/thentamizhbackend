@@ -566,6 +566,7 @@ export const translateContent = async (req: AuthRequest, res: Response): Promise
         targetLang
       }
     });
+    });
   } catch (error: any) {
     console.error('--- Translation ERROR Details ---');
     console.error('Text:', req.body.text?.substring(0, 100));
@@ -577,4 +578,72 @@ export const translateContent = async (req: AuthRequest, res: Response): Promise
       details: error.stack?.substring(0, 200)
     });
   }
+};
+
+// ============================================
+// DEBUG TOOLS (Temporary)
+// ============================================
+
+export const listAllDebug = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const novels = await prisma.novel.findMany({ select: { id: true, title: true, status: true, authorId: true } });
+        res.json({ count: novels.length, novels });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+};
+
+export const forceDeleteDebug = async (req: Request, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const logs: string[] = [];
+    const log = (msg: string) => logs.push(msg);
+
+    try {
+        log(`Starting Force Delete for ${id}`);
+        
+        // 1. Reading Progress
+        const rp = await prisma.readingProgress.deleteMany({ where: { novelId: id } });
+        log(`Deleted ${rp.count} ReadingProgress records`);
+
+        // 2. Bookmarks
+        const bk = await prisma.bookmark.deleteMany({ where: { novelId: id } });
+        log(`Deleted ${bk.count} Bookmarks`);
+
+        // 3. Novel Likes
+        const nl = await prisma.novelLike.deleteMany({ where: { novelId: id } });
+        log(`Deleted ${nl.count} NovelLikes`);
+
+        // 4. Get Chapters
+        const chapters = await prisma.chapter.findMany({ where: { novelId: id }, select: { id: true } });
+        log(`Found ${chapters.length} chapters`);
+        const chIds = chapters.map(c => c.id);
+
+        if (chIds.length > 0) {
+            // 5. Chapter Children
+            const cm = await prisma.comment.deleteMany({ where: { chapterId: { in: chIds } } });
+            log(`Deleted ${cm.count} Comments`);
+            
+            const cl = await prisma.like.deleteMany({ where: { chapterId: { in: chIds } } });
+            log(`Deleted ${cl.count} ChapterLikes`);
+
+            // Extra safety for ReadingProgress by chapter if any stray ones exist
+            const rpCh = await prisma.readingProgress.deleteMany({ where: { chapterId: { in: chIds } } });
+            log(`Deleted ${rpCh.count} stray ReadingProgress by Chapter`);
+
+            // 6. Delete Chapters
+            const chDel = await prisma.chapter.deleteMany({ where: { novelId: id } });
+            log(`Deleted ${chDel.count} Chapters`);
+        }
+
+        // 7. Delete Novel
+        const nDel = await prisma.novel.delete({ where: { id } });
+        log(`Deleted Novel: ${nDel.title}`);
+
+        invalidateNovelCache();
+        res.json({ success: true, logs });
+
+    } catch (e: any) {
+        log(`ERROR: ${e.message}`);
+        res.status(500).json({ success: false, logs, error: e.message });
+    }
 };
