@@ -566,7 +566,6 @@ export const translateContent = async (req: AuthRequest, res: Response): Promise
         targetLang
       }
     });
-    });
   } catch (error: any) {
     console.error('--- Translation ERROR Details ---');
     console.error('Text:', req.body.text?.substring(0, 100));
@@ -594,7 +593,7 @@ export const listAllDebug = async (req: Request, res: Response): Promise<void> =
 };
 
 export const forceDeleteDebug = async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const logs: string[] = [];
     const log = (msg: string) => logs.push(msg);
 
