@@ -21,6 +21,12 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
   // console.log('[getNovels] Fix Applied: Safe Author Access');
   
   try {
+    // Add Cache-Control for Vercel Edge Caching
+    res.setHeader(
+      "Cache-Control",
+      "public, s-maxage=60, stale-while-revalidate=300"
+    );
+
     const where: any = {};
     if (search) {
       where.OR = [
@@ -58,14 +64,14 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
           id: true,
           title: true,
           titleEn: true, 
-          genre: true,
-          status: true,
+          // genre: true, // Removed for performance
+          status: true, // Kept for frontend filtering (Ongoing/Completed)
           coverImageUrl: true,
-          views: true,
+          // views: true, // Removed for performance optimization if not crucial for list items
           createdAt: true,
           updatedAt: true,
           author: { select: { name: true, email: true } },
-          _count: { select: { chapters: true } } 
+          // _count: { select: { chapters: true } } // Removed for performance to avoid extra join/count
         },
         orderBy: { createdAt: 'desc' } 
       }),
@@ -73,17 +79,18 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
     ]);
 
     const formattedNovels = novels.map((novel: any) => ({
-      _id: novel.id,
+      _id: novel.id, // Legacy support
       id: novel.id,
       title: novel.title,
       titleEn: novel.titleEn,
-      genre: novel.genre,
+      // genre: novel.genre,
       status: novel.status,
       coverImage: novel.coverImageUrl,
       author: novel.author?.name || novel.author?.email?.split('@')[0] || 'Unknown',
-      totalChapters: novel._count?.chapters || 0,
+      // totalChapters: novel._count?.chapters || 0,
       stats: {
-        views: novel.views,
+        // views: novel.views,
+        views: 0, // Placeholder
         likes: 0,
         bookmarks: 0
       },
