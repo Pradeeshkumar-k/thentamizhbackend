@@ -286,9 +286,9 @@ export const deleteNovel = async (req: AuthRequest, res: Response): Promise<void
     });
 
   } catch (error: any) {
-    console.error("Delete request error:", error);
+    console.error("NOVEL API ERROR [deleteNovel]:", error);
     if (!res.headersSent) {
-        res.status(500).json({ message: "Delete failed", error: error.message });
+        res.status(500).json({ message: "Server error" });
     }
   }
 };
