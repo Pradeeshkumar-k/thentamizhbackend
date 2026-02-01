@@ -31,6 +31,7 @@ model Novel {
   description       String
   genre             String
   status            NovelStatus       @default(DRAFT)
+  deletedAt         DateTime?
   titleEn           String?
   descriptionEn     String?
   views             Int               @default(0)
