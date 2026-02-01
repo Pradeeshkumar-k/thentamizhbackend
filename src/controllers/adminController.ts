@@ -261,48 +261,62 @@ export const updateNovel = async (req: AuthRequest, res: Response): Promise<void
 
 
 export const deleteNovel = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params as any;
+  const { id } = req.params as { id: string };
 
   try {
-    // Perform deletion synchronously to ensure completion in serverless environments
-    await prisma.$transaction(async (tx: any) => {
-        // 1. Delete Novel Dependencies
-        await tx.readingProgress.deleteMany({ where: { novelId: id } });
-        await tx.bookmark.deleteMany({ where: { novelId: id } });
-        await tx.novelLike.deleteMany({ where: { novelId: id } });
-
-        // 2. Find Chapters to delete their dependencies
-        const chapters = await tx.chapter.findMany({ 
-            where: { novelId: id },
-            select: { id: true }
-        });
-        const chapterIds = chapters.map((c: any) => c.id);
-
-        if (chapterIds.length > 0) {
-            // 3. Delete Chapter Dependencies
-            await tx.comment.deleteMany({ where: { chapterId: { in: chapterIds } } });
-            await tx.like.deleteMany({ where: { chapterId: { in: chapterIds } } });
-            await tx.readingProgress.deleteMany({ where: { chapterId: { in: chapterIds } } });
-            
-            // 4. Delete Chapters
-            await tx.chapter.deleteMany({ where: { novelId: id } });
-        }
-
-        // 5. Finally Delete Novel
-        await tx.novel.delete({ where: { id } });
+    // 1. Respond Early to prevent timeout (ECONNABORTED)
+    res.status(202).json({
+        success: true, 
+        message: 'Deletion processing in background' 
     });
 
-    invalidateNovelCache();
-    console.log(`[DELETE] Novel ${id} removed successfully`);
-    
-    res.json({
-        success: true, 
-        message: 'Novel deleted successfully' 
+    // 2. Perform deletion asynchronously (Fire-and-Forget)
+    setImmediate(async () => {
+        try {
+            console.log(`[DELETE START] Deleting Novel ${id}...`);
+            await prisma.$transaction(async (tx: any) => {
+                // 1. Delete Novel Dependencies
+                await tx.readingProgress.deleteMany({ where: { novelId: id } });
+                await tx.bookmark.deleteMany({ where: { novelId: id } });
+                await tx.novelLike.deleteMany({ where: { novelId: id } });
+
+                // 2. Find Chapters to delete their dependencies
+                const chapters = await tx.chapter.findMany({ 
+                    where: { novelId: id },
+                    select: { id: true }
+                });
+                const chapterIds = chapters.map((c: any) => c.id);
+
+                if (chapterIds.length > 0) {
+                    // 3. Delete Chapter Dependencies
+                    await tx.comment.deleteMany({ where: { chapterId: { in: chapterIds } } });
+                    await tx.like.deleteMany({ where: { chapterId: { in: chapterIds } } });
+                    await tx.readingProgress.deleteMany({ where: { chapterId: { in: chapterIds } } });
+                    
+                    // 4. Delete Chapters
+                    await tx.chapter.deleteMany({ where: { novelId: id } });
+                }
+
+                // 5. Finally Delete Novel
+                await tx.novel.delete({ where: { id } });
+            });
+
+            // 6. Invalidate Cache
+            invalidateNovelCache();
+            console.log(`[DELETE SUCCESS] Novel ${id} removed successfully`);
+        
+        } catch (bgError: any) {
+            console.error(`[DELETE FAILED] Novel ${id} could not be deleted entirely.`, bgError);
+            // Note: We can't report this to the already-sent response. 
+            // Logging is critical here for debugging.
+        }
     });
 
   } catch (error: any) {
     console.error("Delete request error:", error);
-    res.status(500).json({ message: "Delete failed", error: error.message });
+    if (!res.headersSent) {
+        res.status(500).json({ message: "Delete failed", error: error.message });
+    }
   }
 };
 
