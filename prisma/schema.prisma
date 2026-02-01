@@ -1,12 +1,128 @@
 generator client {
-  provider = "prisma-client-js"
-  engineType = "library"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "rhel-openssl-3.0.x", "rhel-openssl-1.0.x"]
+  engineType    = "library"
 }
 
 datasource db {
   provider = "postgresql"
-  url = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String            @id @default(uuid())
+  email           String            @unique
+  username        String?           @unique
+  name            String?
+  passwordHash    String
+  role            Role              @default(USER)
+  createdAt       DateTime          @default(now())
+  bookmarks       Bookmark[]
+  comments        Comment[]
+  likes           Like[]
+  novels          Novel[]
+  novelLikes      NovelLike[]
+  readingProgress ReadingProgress[]
+}
+
+model Novel {
+  id                String            @id @default(uuid())
+  title             String
+  description       String
+  genre             String
+  status            NovelStatus       @default(DRAFT)
+  titleEn           String?
+  descriptionEn     String?
+  views             Int               @default(0)
+  coverImageUrl     String?
+  authorId          String
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  bookmarks         Bookmark[]
+  chapters          Chapter[]
+  author            User              @relation(fields: [authorId], references: [id])
+  likes             NovelLike[]
+  readingProgresses ReadingProgress[]
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([authorId])
+  @@index([createdAt(sort: Desc)], map: "idx_novels_created_at")
+}
+
+model Chapter {
+  id                String            @id @default(uuid())
+  novelId           String
+  title             String
+  content           String
+  titleEn           String?
+  contentEn         String?
+  thumbnailUrl      String?
+  views             Int               @default(0)
+  order             Int
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  novel             Novel             @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  comments          Comment[]
+  likes             Like[]
+  readingProgresses ReadingProgress[]
+
+  @@index([novelId, order])
+}
+
+model Bookmark {
+  id        String   @id @default(uuid())
+  userId    String
+  novelId   String
+  createdAt DateTime @default(now())
+  novel     Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, novelId])
+}
+
+model NovelLike {
+  id        String   @id @default(uuid())
+  userId    String
+  novelId   String
+  createdAt DateTime @default(now())
+  novel     Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, novelId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  text      String
+  chapterId String
+  userId    String
+  createdAt DateTime @default(now())
+  chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Like {
+  chapterId String
+  userId    String
+  chapter   Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([chapterId, userId])
+}
+
+model ReadingProgress {
+  id        String   @id @default(uuid())
+  userId    String
+  novelId   String
+  chapterId String
+  progress  Int      @default(0)
+  lastRead  DateTime @default(now())
+  chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  novel     Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, novelId])
 }
 
 enum Role {
@@ -20,124 +136,4 @@ enum NovelStatus {
   ARCHIVED
   COMPLETED
   DELETED
-}
-
-model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  username     String?  @unique
-  name         String?
-  passwordHash String
-  role         Role     @default(USER)
-  createdAt    DateTime @default(now())
-
-  comments        Comment[]
-  likes           Like[]
-  novelLikes      NovelLike[]
-  bookmarks       Bookmark[]
-  readingProgress ReadingProgress[]
-  novels          Novel[]
-}
-
-model Novel {
-  id            String      @id @default(uuid())
-  title         String
-  description   String
-  genre         String
-  status        NovelStatus @default(DRAFT)
-  deletedAt     DateTime?   // Soft Delete Support
-  titleEn       String?
-  descriptionEn String?
-  views         Int         @default(0)
-  coverImageUrl String?
-  authorId      String
-  author        User        @relation(fields: [authorId], references: [id])
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-
-  chapters          Chapter[]
-  bookmarks         Bookmark[]
-  likes             NovelLike[]
-  readingProgresses ReadingProgress[]
-
-  @@index([createdAt])
-  @@index([status])
-  @@index([authorId])
-}
-
-model Chapter {
-  id           String   @id @default(uuid())
-  novelId      String
-  novel        Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
-  title        String
-  content      String
-  titleEn      String?
-  contentEn    String?
-  thumbnailUrl String?
-  views        Int      @default(0)
-  order        Int
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  comments          Comment[]
-  likes             Like[]
-
-  readingProgresses ReadingProgress[]
-
-  @@index([novelId, order])
-}
-
-model Bookmark {
-  id        String   @id @default(uuid())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  novel     Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
-  novelId   String
-  createdAt DateTime @default(now())
-
-  @@unique([userId, novelId])
-}
-
-model NovelLike {
-  id        String   @id @default(uuid())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  novel     Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
-  novelId   String
-  createdAt DateTime @default(now())
-
-  @@unique([userId, novelId])
-}
-
-model Comment {
-  id        String   @id @default(uuid())
-  text      String
-  chapterId String
-  chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-}
-
-model Like {
-  chapterId String
-  chapter   Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
-  userId    String
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([chapterId, userId])
-}
-
-model ReadingProgress {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  novelId   String
-  novel     Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
-  chapterId String
-  chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
-  progress  Int      @default(0)
-  lastRead  DateTime @default(now())
-
-  @@unique([userId, novelId])
 }
