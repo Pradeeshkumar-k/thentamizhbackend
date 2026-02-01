@@ -19,6 +19,7 @@ enum NovelStatus {
   PUBLISHED
   ARCHIVED
   COMPLETED
+  DELETED
 }
 
 model User {
@@ -44,6 +45,7 @@ model Novel {
   description   String
   genre         String
   status        NovelStatus @default(DRAFT)
+  deletedAt     DateTime?   // Soft Delete Support
   titleEn       String?
   descriptionEn String?
   views         Int         @default(0)

@@ -75,6 +75,9 @@ export const getAllNovelsAdmin = async (req: AuthRequest, res: Response): Promis
     
     if (status) {
       where.status = status;
+    } else {
+      // Default: Exclude DELETED novels from list
+      where.status = { not: 'DELETED' };
     }
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -264,52 +267,22 @@ export const deleteNovel = async (req: AuthRequest, res: Response): Promise<void
   const { id } = req.params as { id: string };
 
   try {
-    // 1. Respond Early to prevent timeout (ECONNABORTED)
-    res.status(202).json({
-        success: true, 
-        message: 'Deletion processing in background' 
+    // Soft Delete Implementation
+    await prisma.novel.update({
+        where: { id },
+        data: { 
+            status: 'DELETED' as any,
+            // @ts-ignore
+            deletedAt: new Date()
+        }
     });
 
-    // 2. Perform deletion asynchronously (Fire-and-Forget)
-    setImmediate(async () => {
-        try {
-            console.log(`[DELETE START] Deleting Novel ${id}...`);
-            await prisma.$transaction(async (tx: any) => {
-                // 1. Delete Novel Dependencies
-                await tx.readingProgress.deleteMany({ where: { novelId: id } });
-                await tx.bookmark.deleteMany({ where: { novelId: id } });
-                await tx.novelLike.deleteMany({ where: { novelId: id } });
+    invalidateNovelCache();
+    console.log(`[SOFT DELETE] Novel ${id} marked as DELETED`);
 
-                // 2. Find Chapters to delete their dependencies
-                const chapters = await tx.chapter.findMany({ 
-                    where: { novelId: id },
-                    select: { id: true }
-                });
-                const chapterIds = chapters.map((c: any) => c.id);
-
-                if (chapterIds.length > 0) {
-                    // 3. Delete Chapter Dependencies
-                    await tx.comment.deleteMany({ where: { chapterId: { in: chapterIds } } });
-                    await tx.like.deleteMany({ where: { chapterId: { in: chapterIds } } });
-                    await tx.readingProgress.deleteMany({ where: { chapterId: { in: chapterIds } } });
-                    
-                    // 4. Delete Chapters
-                    await tx.chapter.deleteMany({ where: { novelId: id } });
-                }
-
-                // 5. Finally Delete Novel
-                await tx.novel.delete({ where: { id } });
-            });
-
-            // 6. Invalidate Cache
-            invalidateNovelCache();
-            console.log(`[DELETE SUCCESS] Novel ${id} removed successfully`);
-        
-        } catch (bgError: any) {
-            console.error(`[DELETE FAILED] Novel ${id} could not be deleted entirely.`, bgError);
-            // Note: We can't report this to the already-sent response. 
-            // Logging is critical here for debugging.
-        }
+    res.json({
+        success: true, 
+        message: 'Novel moved to trash'
     });
 
   } catch (error: any) {

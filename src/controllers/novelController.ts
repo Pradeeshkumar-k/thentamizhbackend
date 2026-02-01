@@ -22,8 +22,8 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
   // console.log('[getNovels] Fix Applied: Safe Author Access');
   
   try {
-    // Fix 3 (Cache): Use no-store to prevent stale data on home page (Edge/Memory cache issues)
-    res.setHeader('Cache-Control', 'no-store');
+    // Fix 3 (Cache): Use public cache with revalidation for LCP (Edge Caching)
+    res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
 
     const where: any = {};
     if (search) {
@@ -31,6 +31,11 @@ export const getNovels = async (req: Request, res: Response): Promise<void> => {
         { title: { contains: String(search), mode: 'insensitive' } },
         { description: { contains: String(search), mode: 'insensitive' } },
       ];
+    }
+    
+    // Default Filter: User said "Every public API must exclude deleted novels"
+    if (!where.status) {
+       where.status = { not: 'DELETED' };
     }
 
     // Safeguard: Exclude legacy numeric IDs that cause Prisma "Inconsistent column data" errors
@@ -216,6 +221,8 @@ export const getNovelById = async (req: Request, res: Response): Promise<void> =
        formattedNovel = cached.data;
     } else {
         // 2. Fetch from DB if not in cache
+        // We must check if it's deleted. findUnique doesn't support complex where (like status != DELETED) easily
+        // so we findUnique first, then check status.
         const novel = await prisma.novel.findUnique({
           where: { id },
           include: {
@@ -228,7 +235,7 @@ export const getNovelById = async (req: Request, res: Response): Promise<void> =
           }
         });
 
-        if (!novel) {
+        if (!novel || (novel.status as any) === 'DELETED') {
           res.status(404).json({ message: 'Novel not found' });
           return;
         }
