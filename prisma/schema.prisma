@@ -61,6 +61,7 @@ model Chapter {
   thumbnailUrl      String?
   views             Int               @default(0)
   order             Int
+  isTranslating     Boolean           @default(false)
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   novel             Novel             @relation(fields: [novelId], references: [id], onDelete: Cascade)

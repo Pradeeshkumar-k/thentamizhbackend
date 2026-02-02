@@ -14,15 +14,27 @@ const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) 
   : null;
 
-const chunkText = (text: string, size = 3000): string[] => {
-  const chunks: string[] = [];
-  let start = 0;
+const withTimeout = <T>(p: Promise<T>, ms = 15000): Promise<T> =>
+  Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject('Timeout'), ms))
+  ]);
 
-  while (start < text.length) {
-    chunks.push(text.slice(start, start + size));
-    start += size;
+const chunkText = (text: string, size = 3000): string[] => {
+  const paragraphs = text.split('\n\n');
+  const chunks: string[] = [];
+  let current = '';
+
+  for (const p of paragraphs) {
+    if ((current + p).length > size) {
+      chunks.push(current.trim());
+      current = p + '\n\n';
+    } else {
+      current += p + '\n\n';
+    }
   }
 
+  if (current.trim()) chunks.push(current.trim());
   return chunks;
 };
 
@@ -166,25 +178,51 @@ export const TranslationService = {
     try {
       const start = Date.now();
       const chapter = await prisma.chapter.findUnique({ where: { id: chapterId } });
-      if (!chapter || chapter.contentEn) return chapter?.contentEn ?? null;
-
-      const chunks = chunkText(chapter.content, 3000);
-      const translatedChunks: string[] = [];
-
-      for (const chunk of chunks) {
-        const translated = await translateContent(chunk);
-        translatedChunks.push(translated);
+      
+      // @ts-ignore
+      if (!chapter || chapter.contentEn || chapter.isTranslating) {
+        return chapter?.contentEn ?? null;
       }
 
-      const fullTranslation = translatedChunks.join('\n\n');
-
+      // Lock
       await prisma.chapter.update({
         where: { id: chapterId },
-        data: { contentEn: fullTranslation }
+        // @ts-ignore
+        data: { isTranslating: true }
       });
 
-      log(`[Translation] Completed in ${Date.now() - start}ms`);
-      return fullTranslation;
+      try {
+        const chunks = chunkText(chapter.content, 3000);
+        const translatedChunks: string[] = [];
+
+        for (const chunk of chunks) {
+          // Add per-chunk timeout
+          const translated = await withTimeout(translateContent(chunk));
+          translatedChunks.push(translated);
+        }
+
+        const fullTranslation = translatedChunks.join('\n\n');
+
+        await prisma.chapter.update({
+          where: { id: chapterId },
+          data: { contentEn: fullTranslation }
+        });
+
+        log(`[Translation] Completed in ${Date.now() - start}ms`);
+        
+        try {
+          invalidateNovelCache(); 
+        } catch {}
+
+        return fullTranslation;
+      } finally {
+        // Unlock
+        await prisma.chapter.update({
+          where: { id: chapterId },
+          // @ts-ignore
+          data: { isTranslating: false }
+        });
+      }
     } catch (err) {
       log(`translateAndSaveChapter Error: ${err}`);
       return null;

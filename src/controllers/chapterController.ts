@@ -35,7 +35,9 @@ export const getChapterById = async (req: Request, res: Response) => {
         },
         _count: {
           select: { likes: true }
-        }
+        },
+        // @ts-ignore
+        isTranslating: true
       }
     });
 
@@ -52,6 +54,10 @@ export const getChapterById = async (req: Request, res: Response) => {
       if (translated) {
         chapter.contentEn = translated;
       }
+    // @ts-ignore
+    } else if (chapter.isTranslating) {
+      // Also no-cache if background translation is already running
+      res.setHeader('Cache-Control', 'private, no-store');
     } else {
       res.setHeader('Cache-Control', 'public, s-maxage=300');
     }
@@ -66,14 +72,15 @@ export const getChapterById = async (req: Request, res: Response) => {
     // but relying on req.user as per user request snippet).
     // Note: If this is a public route without optional auth, req.user might be undefined.
     // However, we follow the user's snippet exactly.
+    // @ts-ignore
     const userId = (req as any).user?.userId;
 
     res.json({
       ...chapter,
-      chapterNumber: chapter.order,
-      likeCount: chapter._count.likes,
+      chapterNumber: (chapter as any).order,
+      likeCount: (chapter as any)._count?.likes ?? 0,
       likedByMe: userId
-        ? chapter.likes.some(l => l.userId === userId)
+        ? (chapter as any).likes?.some((l: any) => l.userId === userId)
         : false
     });
 
