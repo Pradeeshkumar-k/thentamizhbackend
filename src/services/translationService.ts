@@ -148,5 +148,25 @@ export const TranslationService = {
     } catch (err) {
       log(`translateAndSaveNovel Error: ${err}`);
     }
+  },
+
+  translateAndSaveChapter: async (chapterId: string): Promise<void> => {
+    try {
+      const chapter = await prisma.chapter.findUnique({ where: { id: chapterId } });
+      if (!chapter || chapter.contentEn) return;
+
+      const translated = await TranslationService.translateTextOrNull(
+        chapter.content.substring(0, 5000) // SAFE LIMIT
+      );
+
+      if (translated) {
+        await prisma.chapter.update({
+          where: { id: chapterId },
+          data: { contentEn: translated }
+        });
+      }
+    } catch {
+      // 🔇 swallow errors — NO crash
+    }
   }
 };

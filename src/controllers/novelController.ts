@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import prisma from '../utils/prisma';
 import { TranslationService } from '../services/translationService';
-import { decodeAccessToken } from '../utils/jwt';
+
 
 // Cache Invalidation (No-op as in-memory cache is removed)
 export const invalidateNovelCache = () => {
@@ -38,7 +38,8 @@ export const getNovels = async (req: Request, res: Response) => {
         titleEn: true,
         coverImageUrl: true,
         createdAt: true,
-        status: true // Added for verify
+        status: true, // Added for verify
+        author: { select: { name: true } }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -48,8 +49,15 @@ export const getNovels = async (req: Request, res: Response) => {
       'public, s-maxage=60, stale-while-revalidate=300'
     );
 
+    // Normalize Data (Backend-side)
+    const normalizedNovels = novels.map((n: any) => ({
+      ...n,
+      coverImage: n.coverImageUrl,
+      author: n.author?.name || 'Unknown' // Flatten author object
+    }));
+
     res.json({
-      novels,
+      novels: normalizedNovels,
       page,
       limit,
       hasMore: novels.length === limit
@@ -100,7 +108,20 @@ export const getNovelById = async (req: Request, res: Response) => {
       "public, s-maxage=60, stale-while-revalidate=300"
     );
 
-    res.json(novel);
+    // 🔥 Fire-and-forget view increment
+    prisma.novel.update({
+      where: { id },
+      data: { views: { increment: 1 } }
+    }).catch(() => {});
+
+    // Normalize Data (Backend-side)
+    const normalizedNovel = {
+      ...novel,
+       coverImage: (novel as any).coverImageUrl,
+       author: (novel as any).author?.name || 'Unknown' // Flatten author object
+    };
+
+    res.json(normalizedNovel);
   } catch (err) {
     console.error("GET NOVEL ERROR:", err);
     res.status(500).json({ message: "Server error" });
