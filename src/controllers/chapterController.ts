@@ -11,7 +11,43 @@ export const getChapterById = async (req: Request, res: Response) => {
   const isLoggedIn = Boolean(req.headers.authorization);
 
   try {
-    // Dynamic Cache Control based on translation availability (set later)
+    // 🚫 No CDN cache for views
+    res.setHeader('Cache-Control', 'private, no-store');
+
+    // REAL IP (Vercel-safe)
+    const ip =
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      req.socket.remoteAddress ||
+      'unknown';
+
+    // Try to get userId if available
+    // @ts-ignore
+    const userId = (req as any).user?.userId || null;
+
+    // Count only once per 1 hour
+    const since = new Date(Date.now() - 60 * 60 * 1000);
+
+    const whereCondition = userId
+      ? { chapterId: id, userId, viewedAt: { gte: since } }
+      : { chapterId: id, ip, viewedAt: { gte: since } };
+
+    // @ts-ignore
+    const alreadyViewed = await prisma.chapterView.findFirst({
+      where: whereCondition,
+    });
+
+    if (!alreadyViewed) {
+      await prisma.$transaction([
+        // @ts-ignore
+        prisma.chapterView.create({
+          data: { chapterId: id, userId, ip },
+        }),
+        prisma.chapter.update({
+          where: { id },
+          data: { views: { increment: 1 } },
+        }),
+      ]);
+    }
 
     const chapter = await prisma.chapter.findUnique({
       where: { id },
@@ -23,7 +59,7 @@ export const getChapterById = async (req: Request, res: Response) => {
         contentEn: true,
         order: true,
         likes: {
-            select: { userId: true }
+          select: { userId: true }
         },
         comments: {
           take: 20, // Paginate
@@ -48,32 +84,14 @@ export const getChapterById = async (req: Request, res: Response) => {
 
     // 🔥 Synchronous English Translation
     if (lang === 'english' && !chapter.contentEn) {
-      res.setHeader('Cache-Control', 'private, no-store');
-
       const translated = await TranslationService.translateAndSaveChapter(id);
       if (translated) {
         chapter.contentEn = translated;
       }
     // @ts-ignore
     } else if (chapter.isTranslating) {
-      // Also no-cache if background translation is already running
-      res.setHeader('Cache-Control', 'private, no-store');
-    } else {
-      res.setHeader('Cache-Control', 'public, s-maxage=300');
+      // isTranslating logic already handled by Cache-Control: private, no-store above
     }
-
-    // 🔥 Fire-and-forget view increment
-    prisma.chapter.update({
-      where: { id },
-      data: { views: { increment: 1 } }
-    }).catch(() => {});
-
-    // Try to get userId if available (from middleware or decoding if we added it back, 
-    // but relying on req.user as per user request snippet).
-    // Note: If this is a public route without optional auth, req.user might be undefined.
-    // However, we follow the user's snippet exactly.
-    // @ts-ignore
-    const userId = (req as any).user?.userId;
 
     res.json({
       ...chapter,
