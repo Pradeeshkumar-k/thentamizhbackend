@@ -6,13 +6,13 @@ import { TranslationService } from '../services/translationService';
 // Public: Get chapter content
 // 🚀 FAST & SAFE
 export const getChapterById = async (req: Request, res: Response) => {
-  const id = String(req.params.id);
+  const chapterId = String(req.params.id);
   const lang = req.query.lang ? String(req.query.lang) : undefined;
   const isLoggedIn = Boolean(req.headers.authorization);
 
   try {
     // 🚫 No CDN cache for views
-    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Cache-Control', 'private, no-store, max-age=0');
 
     // REAL IP (Vercel-safe)
     const ip =
@@ -22,14 +22,19 @@ export const getChapterById = async (req: Request, res: Response) => {
 
     // Try to get userId if available
     // @ts-ignore
-    const userId = (req as any).user?.userId || null;
+    const userId = (req as any).user?.userId || (req as any).user?.id || null;
 
-    // Count only once per 1 hour
-    const since = new Date(Date.now() - 60 * 60 * 1000);
+    // Count only once per 24 hours
+    const TWENTY_FOUR_HOURS = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    const whereCondition = userId
-      ? { chapterId: id, userId, viewedAt: { gte: since } }
-      : { chapterId: id, ip, viewedAt: { gte: since } };
+    const whereCondition = {
+      chapterId,
+      OR: [
+        userId ? { userId } : undefined,
+        { ip },
+      ].filter(Boolean) as any,
+      viewedAt: { gte: TWENTY_FOUR_HOURS },
+    };
 
     // @ts-ignore
     const alreadyViewed = await prisma.chapterView.findFirst({
@@ -40,17 +45,17 @@ export const getChapterById = async (req: Request, res: Response) => {
       await prisma.$transaction([
         // @ts-ignore
         prisma.chapterView.create({
-          data: { chapterId: id, userId, ip },
+          data: { chapterId, userId, ip },
         }),
         prisma.chapter.update({
-          where: { id },
+          where: { id: chapterId },
           data: { views: { increment: 1 } },
         }),
       ]);
     }
 
     const chapter = await prisma.chapter.findUnique({
-      where: { id },
+      where: { id: chapterId },
       select: {
         id: true,
         title: true,
@@ -84,7 +89,7 @@ export const getChapterById = async (req: Request, res: Response) => {
 
     // 🔥 Synchronous English Translation
     if (lang === 'english' && !chapter.contentEn) {
-      const translated = await TranslationService.translateAndSaveChapter(id);
+      const translated = await TranslationService.translateAndSaveChapter(chapterId as string);
       if (translated) {
         chapter.contentEn = translated;
       }
