@@ -296,7 +296,7 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
         titleEn: true, // Include English Title
         order: true,
         views: true,
-        // thumbnailUrl: true, // Excluded for performance
+        thumbnailUrl: true, // Included
         createdAt: true,
         updatedAt: true
         // Exclude content for list view
@@ -313,7 +313,7 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
       chapterNumber: ch.order,
       order: ch.order,
       views: ch.views,
-      // thumbnail: ch.thumbnailUrl, // Excluded for performance
+      thumbnail: ch.thumbnailUrl, // Included
       createdAt: ch.createdAt,
       updatedAt: ch.updatedAt
     }));
