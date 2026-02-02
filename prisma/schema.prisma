@@ -68,6 +68,7 @@ model Chapter {
   comments          Comment[]
   likes             Like[]
   readingProgresses ReadingProgress[]
+  views_list        ChapterView[]
 
   @@index([novelId, order])
   @@index([novelId]) // Added explicit index
@@ -131,6 +132,19 @@ model ReadingProgress {
 
   @@unique([userId, novelId])
   @@index([userId, novelId]) // Added composite index
+}
+
+model ChapterView {
+  id        String   @id @default(uuid())
+  chapterId String
+  ip        String
+  userId    String?
+  viewedAt  DateTime @default(now())
+
+  chapter   Chapter  @relation(fields: [chapterId], references: [id])
+
+  @@index([chapterId, ip])
+  @@index([chapterId, userId])
 }
 
 enum Role {
