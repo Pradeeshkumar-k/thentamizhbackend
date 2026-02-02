@@ -11,15 +11,7 @@ export const getChapterById = async (req: Request, res: Response) => {
   const isLoggedIn = Boolean(req.headers.authorization);
 
   try {
-    // FIX 1: Hybrid Cache Strategy
-    if (isLoggedIn) {
-      res.setHeader('Cache-Control', 'private, no-store');
-    } else {
-      res.setHeader(
-        'Cache-Control',
-        'public, s-maxage=60, stale-while-revalidate=300'
-      );
-    }
+    // Dynamic Cache Control based on translation availability (set later)
 
     const chapter = await prisma.chapter.findUnique({
       where: { id },
@@ -52,10 +44,16 @@ export const getChapterById = async (req: Request, res: Response) => {
       return;
     }
 
-    // 🔥 Fire-and-forget translation (NO await)
-    if (lang === "english" && !chapter.contentEn) {
-      TranslationService.translateAndSaveChapter?.(id)
-        .catch(() => {});
+    // 🔥 Synchronous English Translation
+    if (lang === 'english' && !chapter.contentEn) {
+      res.setHeader('Cache-Control', 'private, no-store');
+
+      const translated = await TranslationService.translateAndSaveChapter(id);
+      if (translated) {
+        chapter.contentEn = translated;
+      }
+    } else {
+      res.setHeader('Cache-Control', 'public, s-maxage=300');
     }
 
     // 🔥 Fire-and-forget view increment

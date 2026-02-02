@@ -56,6 +56,13 @@ export const getNovels = async (req: Request, res: Response) => {
       author: n.author?.name || 'Unknown' // Flatten author object
     }));
 
+    // 🔥 Pre-translation trigger (fire-and-forget)
+    novels.forEach(n => {
+      if (!n.titleEn) {
+        TranslationService.translateAndSaveNovel(n.id);
+      }
+    });
+
     res.json({
       novels: normalizedNovels,
       page,
@@ -108,11 +115,15 @@ export const getNovelById = async (req: Request, res: Response) => {
       "public, s-maxage=60, stale-while-revalidate=300"
     );
 
-    // 🔥 Fire-and-forget view increment
+    // 🔥 Fire-and-forget view increment & pre-translation
     prisma.novel.update({
       where: { id },
       data: { views: { increment: 1 } }
     }).catch(() => {});
+
+    if (!novel.titleEn || !novel.descriptionEn) {
+      TranslationService.translateAndSaveNovel(id);
+    }
 
     // Normalize Data (Backend-side)
     const normalizedNovel = {

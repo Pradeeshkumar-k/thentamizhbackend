@@ -14,6 +14,18 @@ const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) 
   : null;
 
+const chunkText = (text: string, size = 3000): string[] => {
+  const chunks: string[] = [];
+  let start = 0;
+
+  while (start < text.length) {
+    chunks.push(text.slice(start, start + size));
+    start += size;
+  }
+
+  return chunks;
+};
+
 /**
  * High-accuracy translation service
  * Prioritizes GPT-4 for literary context, falls back to Google if no key
@@ -24,9 +36,9 @@ export const translateContent = async (text: string, to: string = 'en'): Promise
   // 1. Try OpenAI if key is available
   if (openai) {
     try {
-      log('Using OpenAI for high-accuracy translation...');
+      log('Using OpenAI (gpt-4o-mini) for translation...');
       const response = await openai.chat.completions.create({
-        model: "gpt-4",
+        model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
@@ -37,7 +49,7 @@ export const translateContent = async (text: string, to: string = 'en'): Promise
             content: text
           }
         ],
-        temperature: 0.7,
+        temperature: 0.3,
       });
 
       const translated = response.choices[0]?.message?.content;
@@ -150,23 +162,32 @@ export const TranslationService = {
     }
   },
 
-  translateAndSaveChapter: async (chapterId: string): Promise<void> => {
+  translateAndSaveChapter: async (chapterId: string): Promise<string | null> => {
     try {
+      const start = Date.now();
       const chapter = await prisma.chapter.findUnique({ where: { id: chapterId } });
-      if (!chapter || chapter.contentEn) return;
+      if (!chapter || chapter.contentEn) return chapter?.contentEn ?? null;
 
-      const translated = await TranslationService.translateTextOrNull(
-        chapter.content.substring(0, 5000) // SAFE LIMIT
-      );
+      const chunks = chunkText(chapter.content, 3000);
+      const translatedChunks: string[] = [];
 
-      if (translated) {
-        await prisma.chapter.update({
-          where: { id: chapterId },
-          data: { contentEn: translated }
-        });
+      for (const chunk of chunks) {
+        const translated = await translateContent(chunk);
+        translatedChunks.push(translated);
       }
-    } catch {
-      // 🔇 swallow errors — NO crash
+
+      const fullTranslation = translatedChunks.join('\n\n');
+
+      await prisma.chapter.update({
+        where: { id: chapterId },
+        data: { contentEn: fullTranslation }
+      });
+
+      log(`[Translation] Completed in ${Date.now() - start}ms`);
+      return fullTranslation;
+    } catch (err) {
+      log(`translateAndSaveChapter Error: ${err}`);
+      return null;
     }
   }
 };
