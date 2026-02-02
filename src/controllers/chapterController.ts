@@ -8,12 +8,18 @@ import { TranslationService } from '../services/translationService';
 export const getChapterById = async (req: Request, res: Response) => {
   const id = String(req.params.id);
   const lang = req.query.lang ? String(req.query.lang) : undefined;
+  const isLoggedIn = Boolean(req.headers.authorization);
 
   try {
-    res.setHeader(
-      "Cache-Control",
-      "public, s-maxage=60, stale-while-revalidate=300"
-    );
+    // FIX 1: Hybrid Cache Strategy
+    if (isLoggedIn) {
+      res.setHeader('Cache-Control', 'private, no-store');
+    } else {
+      res.setHeader(
+        'Cache-Control',
+        'public, s-maxage=60, stale-while-revalidate=300'
+      );
+    }
 
     const chapter = await prisma.chapter.findUnique({
       where: { id },
@@ -24,14 +30,17 @@ export const getChapterById = async (req: Request, res: Response) => {
         content: true,
         contentEn: true,
         order: true,
-        likes: true,
+        likes: {
+            select: { userId: true }
+        },
         comments: {
           include: {
-            user: {
-              select: { id: true, name: true, email: true }
-            }
+            user: { select: { id: true, name: true } }
           },
           orderBy: { createdAt: 'desc' }
+        },
+        _count: {
+          select: { likes: true }
         }
       }
     });
@@ -53,9 +62,19 @@ export const getChapterById = async (req: Request, res: Response) => {
       data: { views: { increment: 1 } }
     }).catch(() => {});
 
+    // Try to get userId if available (from middleware or decoding if we added it back, 
+    // but relying on req.user as per user request snippet).
+    // Note: If this is a public route without optional auth, req.user might be undefined.
+    // However, we follow the user's snippet exactly.
+    const userId = (req as any).user?.userId;
+
     res.json({
       ...chapter,
-      chapterNumber: chapter.order
+      chapterNumber: chapter.order,
+      likeCount: chapter._count.likes,
+      likedByMe: userId
+        ? chapter.likes.some(l => l.userId === userId)
+        : false
     });
 
   } catch (error) {
@@ -135,31 +154,35 @@ export const deleteChapter = async (req: Request, res: Response) => {
 };
 
 // User: Like chapter
-export const likeChapter = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params as { id: string };
+export const likeChapter = async (req: AuthRequest, res: Response) => {
+  const id = String(req.params.id);
   const userId = req.user?.userId;
 
   if (!userId) {
-     res.status(401).json({ message: 'Unauthorized' });
-     return;
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
   }
 
-  try {
-    await prisma.like.create({
-      data: {
+  await prisma.like.upsert({
+    where: {
+      chapterId_userId: {
         chapterId: id,
-        userId,
-      },
-    });
-    res.status(201).json({ message: 'Chapter liked' });
-  } catch (error) {
-    res.status(400).json({ message: 'Error liking chapter (already liked?)', error: (error as any).message });
-  }
+        userId
+      }
+    },
+    update: {},
+    create: {
+      chapterId: id,
+      userId
+    }
+  });
+
+  res.json({ message: 'Chapter liked' });
 };
 
 // User: Unlike chapter
-export const unlikeChapter = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params as { id: string };
+export const unlikeChapter = async (req: AuthRequest, res: Response) => {
+  const id = String(req.params.id);
   const userId = req.user?.userId;
 
   if (!userId) {
