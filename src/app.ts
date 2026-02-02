@@ -40,8 +40,4 @@ app.get('/', (req, res) => {
   res.send('Novel Platform Backend is running!');
 });
 
-app.get('/', (req, res) => {
-  res.send('Novel Platform Backend is running!');
-});
-
 export default app;
