@@ -266,9 +266,10 @@ export const updateNovel = async (req: AuthRequest, res: Response): Promise<void
 export const deleteNovel = async (req: Request, res: Response) => {
   try {
     await prisma.novel.update({
-      where: { id: req.params.id },
+      where: { id: String(req.params.id) },
       data: {
-        status: 'DELETED',
+        status: 'DELETED' as any,
+        // @ts-ignore
         deletedAt: new Date()
       }
     });
