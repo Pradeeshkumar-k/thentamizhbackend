@@ -263,33 +263,20 @@ export const updateNovel = async (req: AuthRequest, res: Response): Promise<void
 };
 
 
-export const deleteNovel = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params as { id: string };
-
+export const deleteNovel = async (req: Request, res: Response) => {
   try {
-    // Soft Delete Implementation
     await prisma.novel.update({
-        where: { id },
-        data: { 
-            status: 'DELETED' as any,
-            // @ts-ignore
-            deletedAt: new Date()
-        }
+      where: { id: req.params.id },
+      data: {
+        status: 'DELETED',
+        deletedAt: new Date()
+      }
     });
 
-    invalidateNovelCache();
-    console.log(`[SOFT DELETE] Novel ${id} marked as DELETED`);
-
-    res.json({
-        success: true, 
-        message: 'Novel moved to trash'
-    });
-
-  } catch (error: any) {
-    console.error("NOVEL API ERROR [deleteNovel]:", error);
-    if (!res.headersSent) {
-        res.status(500).json({ message: "Server error" });
-    }
+    res.status(200).json({ message: 'Novel deleted successfully' });
+  } catch (err) {
+    console.error('[DELETE NOVEL ERROR]', err);
+    res.status(500).json({ message: 'Delete failed' });
   }
 };
 

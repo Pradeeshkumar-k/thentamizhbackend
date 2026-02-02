@@ -4,306 +4,106 @@ import prisma from '../utils/prisma';
 import { TranslationService } from '../services/translationService';
 import { decodeAccessToken } from '../utils/jwt';
 
-
-// Simple In-Memory Cache for Novel List
-let novelListCache: { data: any[], timestamp: number } | null = null;
-const CACHE_TTL = 60 * 60 * 1000; // 1 Hour TTL
-
-// Exported Cache Invalidation used by Admin Controller
+// Cache Invalidation (No-op as in-memory cache is removed)
 export const invalidateNovelCache = () => {
-    novelListCache = null;
-    console.log('[Cache] Novel list cache invalidated');
+    // console.log('[Cache] Invalidation called (Cache Disabled)');
 };
 
-// Public: Get all novels
-export const getNovels = async (req: Request, res: Response): Promise<void> => {
-  const { page = 1, limit = 10, search, sort } = req.query;
-  // console.log(`[getNovels] Request: page=${page} limit=${limit} search=${search}`);
-  // console.log('[getNovels] Fix Applied: Safe Author Access');
-  
+// Public: Get all novels (Optimized)
+export const getNovels = async (req: Request, res: Response) => {
   try {
-    // Fix 3 (Cache): Use public cache with revalidation for LCP (Edge Caching)
-    res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    const page = Math.max(Number(req.query.page || 0), 0);
+    const limit = 20;
+    const search = req.query.search?.toString();
 
-    const where: any = {};
+    const where: any = {
+      status: 'PUBLISHED',
+      // @ts-ignore
+      deletedAt: null
+    };
+
     if (search) {
       where.OR = [
-        { title: { contains: String(search), mode: 'insensitive' } },
-        { description: { contains: String(search), mode: 'insensitive' } },
+        { title: { contains: search, mode: 'insensitive' } }
       ];
     }
-    
-    // Default Filter: User said "Every public API must exclude deleted novels"
-    if (!where.status) {
-       where.status = { not: 'DELETED' };
-    }
 
-    // Safeguard: Exclude legacy numeric IDs that cause Prisma "Inconsistent column data" errors
-    // We only want UUID-like strings (usually 36 chars) or at least not single digits
-    where.id = { notIn: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'] };
-
-    // OPTIMIZATION DISABLED: Always fetch fresh data to prevent deleted items from appearing
-    // if (!search && novelListCache && (Date.now() - novelListCache.timestamp < CACHE_TTL)) { ... }
-
-    const skip = (Number(page) - 1) * Number(limit);
-
-    // Parallelize findMany and count for performance
-    const [novels, total] = await Promise.all([
-      prisma.novel.findMany({
-        where,
-        take: Number(limit),
-        skip,
-        select: {
-          id: true,
-          title: true,
-          titleEn: true, 
-          // genre: true, // Removed for performance
-          status: true, // Kept for frontend filtering (Ongoing/Completed)
-          coverImageUrl: true,
-          // views: true, // Removed for performance optimization if not crucial for list items
-          createdAt: true,
-          updatedAt: true,
-          author: { select: { name: true, email: true } },
-          // _count: { select: { chapters: true } } // Removed for performance to avoid extra join/count
-        },
-        orderBy: { createdAt: 'desc' } 
-      }),
-      prisma.novel.count({ where })
-    ]);
-
-    const formattedNovels = novels.map((novel: any) => ({
-      _id: novel.id, // Legacy support
-      id: novel.id,
-      title: novel.title,
-      titleEn: novel.titleEn,
-      // genre: novel.genre,
-      status: novel.status,
-      coverImage: novel.coverImageUrl,
-      author: novel.author?.name || novel.author?.email?.split('@')[0] || 'Unknown',
-      // totalChapters: novel._count?.chapters || 0,
-      stats: {
-        // views: novel.views,
-        views: 0, // Placeholder
-        likes: 0,
-        bookmarks: 0
+    const novels = await prisma.novel.findMany({
+      where,
+      take: limit,
+      skip: page * limit,
+      select: {
+        id: true,
+        title: true,
+        titleEn: true,
+        coverImageUrl: true,
+        createdAt: true,
+        status: true // Added for verify
       },
-      createdAt: novel.createdAt,
-      updatedAt: novel.updatedAt
-    }));
+      orderBy: { createdAt: 'desc' }
+    });
 
-    // CACHE DISABLED: Prevent stale data on home page after deletion
-    // if (!search) {
-    //   novelListCache = { data: formattedNovels, timestamp: Date.now() };
-    // }
+    res.setHeader(
+      'Cache-Control',
+      'public, s-maxage=60, stale-while-revalidate=300'
+    );
 
     res.json({
-      novels: formattedNovels,
-      total,
-      page: Number(page),
-      limit: Number(limit),
-      pagination: {
-        total,
-        page: Number(page),
-        limit: Number(limit),
-        totalPages: Math.ceil(total / Number(limit))
-      }
+      novels,
+      page,
+      limit,
+      hasMore: novels.length === limit
     });
-  } catch (error: any) {
-     console.error("NOVEL API ERROR [getNovels]:", error);
-     res.status(500).json({ message: "Server error" });
+  } catch (err) {
+    console.error('[GET NOVELS ERROR]', err);
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
-// Internal Warmup Function
-export const warmUpCache = async () => {
-    console.log('[Cache Warmup] Starting...');
-    try {
-        const novels = await prisma.novel.findMany({
-            take: 100, // Pre-warm standard limit
-            select: {
-                 id: true,
-                 title: true,
-                 genre: true,
-                 status: true,
-                 coverImageUrl: true,
-                 views: true,
-                 createdAt: true,
-                 updatedAt: true,
-                 author: { select: { name: true, email: true } },
-                 _count: { select: { chapters: true } } 
-            },
-            orderBy: { createdAt: 'desc' } 
-        });
-
-        const formattedNovels = novels.map((novel: any) => ({
-            _id: novel.id,
-            id: novel.id,
-            title: novel.title,
-            genre: novel.genre,
-            status: novel.status,
-            coverImage: novel.coverImageUrl,
-            author: novel.author?.name || novel.author?.email?.split('@')[0] || 'Unknown',
-            totalChapters: novel._count?.chapters || 0,
-            stats: {
-                views: novel.views,
-                likes: 0, 
-                bookmarks: 0
-            },
-            createdAt: novel.createdAt,
-            updatedAt: novel.updatedAt
-        }));
-
-        novelListCache = {
-            data: formattedNovels,
-            timestamp: Date.now()
-        };
-        console.log(`[Cache Warmup] Success! ${novels.length} novels cached.`);
-    } catch (e) {
-        console.error('[Cache Warmup] Failed', e);
-    }
-};
-
-// Cache for Single Novels (ID -> { data, timestamp })
-const novelCache = new Map<string, { data: any, timestamp: number }>();
-const NOVEL_CACHE_TTL = 60 * 60 * 1000; // 1 Hour TTL
-
-// Public: Get novel by ID
-export const getNovelById = async (req: Request, res: Response): Promise<void> => {
+// Public: Get novel by ID (Optimized)
+export const getNovelById = async (req: Request, res: Response) => {
   const id = String(req.params.id);
-  const { lang } = req.query; // Support lang=english query param
   
-  // Cache Key includes Lang to cache translations separately
-  const cacheKey = `${id}-${lang || 'default'}`;
-
-  // Helper to get User ID from optional token (Safe Decode)
-  const getUserIdFromToken = (req: Request): string | null => {
-      try {
-          const auth = req.headers.authorization;
-          if (!auth?.startsWith("Bearer ")) return null;
-          const token = auth.split(" ")[1];
-          // @ts-ignore
-          const decoded: any = decodeAccessToken(token); 
-          return decoded?.userId ?? null;
-      } catch {
-          return null;
-      }
-  };
-
   try {
-    console.log("[getNovelById] START", id, lang);
+    const novel = await prisma.novel.findFirst({
+      where: {
+        id,
+        status: 'PUBLISHED', 
+        // @ts-ignore
+        deletedAt: null
+      },
+      select: {
+        id: true,
+        title: true,
+        titleEn: true,
+        description: true,
+        descriptionEn: true,
+        genre: true,
+        status: true,
+        coverImageUrl: true,
+        views: true,
+        author: { select: { name: true } },
+        chapters: {
+          orderBy: { order: 'asc' },
+          select: { id: true, title: true, titleEn: true, order: true }
+        },
+        _count: { select: { likes: true, bookmarks: true } }
+      }
+    });
 
-    // Add Cache-Control for Vercel Edge Caching
+    if (!novel) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
     res.setHeader(
       "Cache-Control",
       "public, s-maxage=60, stale-while-revalidate=300"
     );
 
-    let formattedNovel: any = null;
-
-    // 1. Check Cache
-    const cached = novelCache.get(cacheKey);
-    if (cached && (Date.now() - cached.timestamp < NOVEL_CACHE_TTL)) {
-       console.log(`[getNovelById] Serving ${id} from Cache ⚡`);
-       // Fire-and-forget view increment (Non-blocking)
-       prisma.novel.update({
-          where: { id },
-          data: { views: { increment: 1 } },
-       }).catch(err => console.error("[Analytics] View increment failed", err));
-
-       formattedNovel = cached.data;
-    } else {
-        // 2. Fetch from DB if not in cache
-        // We must check if it's deleted. findUnique doesn't support complex where (like status != DELETED) easily
-        // so we findUnique first, then check status.
-        const novel = await prisma.novel.findUnique({
-          where: { id },
-          include: {
-            author: { select: { id: true, name: true, email: true } },
-            chapters: {
-              orderBy: { order: 'asc' },
-              select: { id: true, title: true, titleEn: true, order: true, createdAt: true }
-            },
-            _count: { select: { likes: true, bookmarks: true } }
-          }
-        });
-
-        if (!novel || (novel.status as any) === 'DELETED') {
-          res.status(404).json({ message: 'Novel not found' });
-          return;
-        }
-
-        // Auto-Translation Logic (Background / Fire-and-Forget)
-        if (lang === 'english' && (!novel.titleEn || !novel.descriptionEn)) {
-            try {
-                // Fire and forget
-                Promise.resolve(TranslationService.translateAndSaveNovel(id))
-                    .catch(err => console.error("[Background] Translation trigger failed:", err));
-            } catch (err) {
-                console.error("[Translation Trigger Crash]", err);
-            }
-        }
-
-        const n = novel as any;
-        formattedNovel = {
-          ...n,
-          _id: n.id,
-          id: n.id,
-          title: n.title,
-          titleEn: n.titleEn,
-          description: n.description,
-          descriptionEn: n.descriptionEn,
-          genre: n.genre,
-          status: n.status,
-          coverImage: n.coverImageUrl,
-          author: n.author?.name || n.author?.email?.split('@')[0] || 'Unknown',
-          chapters: n.chapters ? n.chapters.map((c: any) => ({
-             ...c,
-             title: c.title,
-             titleEn: c.titleEn
-          })) : [],
-          tags: n.genre ? [n.genre] : [], // REAL DATA: Genre as tag
-          stats: {
-             views: n.views,
-             likes: n._count?.likes || 0,
-             bookmarks: n._count?.bookmarks || 0
-          }
-        };
-
-        // Set Cache
-        novelCache.set(cacheKey, { data: formattedNovel, timestamp: Date.now() });
-        
-        // Async view increment (Non-blocking)
-        prisma.novel.update({
-             where: { id },
-             data: { views: { increment: 1 } },
-        }).catch(err => console.error("[Analytics] View increment failed", err));
-    }
-
-    // 3. Append User Interaction Status (Bypass Cache for this)
-    const userId = getUserIdFromToken(req);
-    let isLiked = false;
-    let isBookmarked = false;
-
-    if (userId) {
-        const [like, bookmark] = await Promise.all([
-            prisma.novelLike.findUnique({ where: { userId_novelId: { userId, novelId: id } } }),
-            prisma.bookmark.findUnique({ where: { userId_novelId: { userId, novelId: id } } })
-        ]);
-        isLiked = !!like;
-        isBookmarked = !!bookmark;
-    }
-
-    console.log("[getNovelById] SUCCESS", id);
-    res.json({
-      novel: formattedNovel,
-      chapters: formattedNovel.chapters || [],
-      isLiked,       // New Field
-      isBookmarked   // New Field
-    });
-
-  } catch (error) {
-    console.error('getNovelById error:', error);
-    res.status(500).json({ message: 'Error fetching novel', error });
+    res.json(novel);
+  } catch (err) {
+    console.error("GET NOVEL ERROR:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 

@@ -1,5 +1,5 @@
 import app from './app';
-import { warmUpCache } from './controllers/novelController';
+
 
 // Start the server (Warmup + Chapter Cache Enabled)
 const PORT = process.env.PORT || 5000;
