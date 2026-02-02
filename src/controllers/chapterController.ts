@@ -34,8 +34,10 @@ export const getChapterById = async (req: Request, res: Response) => {
             select: { userId: true }
         },
         comments: {
+          take: 20, // Paginate
+          skip: Number(req.query.cursor ?? 0),
           include: {
-            user: { select: { id: true, name: true } }
+            user: { select: { id: true, name: true } } // SECURE: No email
           },
           orderBy: { createdAt: 'desc' }
         },

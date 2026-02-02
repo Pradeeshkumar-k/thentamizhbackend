@@ -69,6 +69,7 @@ model Chapter {
   readingProgresses ReadingProgress[]
 
   @@index([novelId, order])
+  @@index([novelId]) // Added explicit index
 }
 
 model Bookmark {
@@ -101,6 +102,8 @@ model Comment {
   createdAt DateTime @default(now())
   chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([chapterId]) // Added explicit index
 }
 
 model Like {
@@ -110,6 +113,8 @@ model Like {
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([chapterId, userId])
+  @@index([chapterId]) // Added explicit index
+  @@index([userId])    // Added explicit index
 }
 
 model ReadingProgress {
@@ -124,6 +129,7 @@ model ReadingProgress {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, novelId])
+  @@index([userId, novelId]) // Added composite index
 }
 
 enum Role {
