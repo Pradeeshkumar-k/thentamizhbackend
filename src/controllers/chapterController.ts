@@ -24,6 +24,15 @@ export const getChapterById = async (req: Request, res: Response) => {
         content: true,
         contentEn: true,
         order: true,
+        likes: true,
+        comments: {
+          include: {
+            user: {
+              select: { id: true, name: true, email: true }
+            }
+          },
+          orderBy: { createdAt: 'desc' }
+        }
       }
     });
 
