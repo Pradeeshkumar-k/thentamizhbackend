@@ -29,10 +29,10 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
     "openai": "^6.15.0",
-    "pg": "^8.18.0",
-    "prisma": "6.2.1"
+    "pg": "^8.18.0"
   },
   "devDependencies": {
+    "prisma": "6.2.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
