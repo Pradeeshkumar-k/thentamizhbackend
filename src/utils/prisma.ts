@@ -4,8 +4,8 @@ const globalForPrisma = global as unknown as {
   prisma?: PrismaClient;
 };
 
-const url = process.env.DIRECT_URL;
-console.log('[PRISMA INIT] DIRECT_URL defined:', !!url);
+const url = process.env.DATABASE_URL;
+console.log('[PRISMA INIT] DATABASE_URL defined:', !!url);
 console.log('[PRISMA INIT] NODE_ENV:', process.env.NODE_ENV);
 
 export const prisma =
