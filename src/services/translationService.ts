@@ -2,7 +2,6 @@ import { OpenAI } from 'openai';
 import { translate } from 'google-translate-api-x';
 import dotenv from 'dotenv';
 import { prisma } from '../utils/prisma';
-import { prisma } from '../utils/prisma';
 import { invalidateNovelCache } from '../controllers/novelController';
 
 const log = (msg: string) => {

@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../utils/prisma';
-import { prisma } from '../utils/prisma';
 import { generateTokens, verifyRefreshToken } from '../utils/jwt';
 
 export const register = async (req: Request, res: Response): Promise<void> => {

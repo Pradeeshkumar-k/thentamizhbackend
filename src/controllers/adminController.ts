@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { prisma } from '../utils/prisma';
-import { prisma } from '../utils/prisma';
 import { translateContent as performTranslation } from '../services/translationService';
 // Import Cache Invalidation
 import { invalidateNovelCache } from './novelController';

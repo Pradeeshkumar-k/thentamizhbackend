@@ -1,7 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { prisma } from '../utils/prisma';
-import { prisma } from '../utils/prisma';
 
 // Update Reading Progress
 export const updateReadingProgress = async (req: AuthRequest, res: Response): Promise<void> => {

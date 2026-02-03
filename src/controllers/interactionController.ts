@@ -1,7 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { prisma } from '../utils/prisma';
-import { prisma } from '../utils/prisma';
 
 // Like a Novel
 export const likeNovel = async (req: AuthRequest, res: Response): Promise<void> => {
