@@ -96,7 +96,9 @@ export const getNovels = async (req: Request, res: Response) => {
     console.error('[ENV CHECK] DIRECT_URL exists:', !!process.env.DIRECT_URL);
     res.status(500).json({ 
       message: 'Server error',
-      error: process.env.NODE_ENV === 'development' ? (err as Error).message : undefined
+      error: String(err),
+      details: (err as any).meta ? (err as any).meta : 'No meta',
+      code: (err as any).code ? (err as any).code : 'No code'
     });
   }
 };
