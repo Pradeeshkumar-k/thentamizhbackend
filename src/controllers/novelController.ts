@@ -66,7 +66,13 @@ export const getNovels = async (req: Request, res: Response) => {
 
     // 🚀 NEW: Batch fetch real-time Redis increments
     const novelIds = novels.map(n => n.id);
-    const redisIncrements = await getRedisViewCounts('novel', novelIds);
+    let redisIncrements: Record<string, number> = {};
+    try {
+      redisIncrements = await getRedisViewCounts('novel', novelIds);
+    } catch (redisErr) {
+      console.error('[GET NOVELS] Redis batch fetch failed (Non-critical):', redisErr);
+      // Fallback to empty -> views will show 0 (or DB if relevant)
+    }
 
     const normalized = novels.map(n => ({
       id: n.id,
