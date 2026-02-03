@@ -2,8 +2,21 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import prisma from '../utils/prisma';
 import { TranslationService } from '../services/translationService';
-import { incrementViewCount } from '../utils/redis';
+import { incrementViewCount, getRedisViewCount, getRedisViewCounts } from '../utils/redis';
 import { addTranslationJob } from '../utils/queue';
+import { decodeAccessToken } from '../utils/jwt';
+
+// Helper to get userId from optional Authorization header
+const getUserIdFromHeader = (authHeader?: string): string | null => {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.split(' ')[1];
+  try {
+    const payload = decodeAccessToken(token) as any;
+    return payload?.userId || payload?.id || null;
+  } catch {
+    return null;
+  }
+};
 
 
 // Cache Invalidation (No-op as in-memory cache is removed)
@@ -45,12 +58,16 @@ export const getNovels = async (req: Request, res: Response) => {
       },
     });
 
+    // 🚀 NEW: Batch fetch real-time Redis increments
+    const novelIds = novels.map(n => n.id);
+    const redisIncrements = await getRedisViewCounts('novel', novelIds);
+
     const normalized = novels.map(n => ({
       id: n.id,
       title: n.title,
       titleEn: n.titleEn,
       coverImage: n.coverImageUrl,
-      views: n.views,
+      views: (n.views || 0) + (redisIncrements[n.id] || 0),
       createdAt: n.createdAt,
       authorName: n.author?.name ?? 'Unknown',
     }));
@@ -78,11 +95,11 @@ export const getNovels = async (req: Request, res: Response) => {
   }
 };
 
-// Public: Get novel by ID (Optimized)
 export const getNovelById = async (req: Request, res: Response) => {
   const id = String(req.params.id);
-  
   try {
+    const userId = getUserIdFromHeader(req.headers.authorization);
+
     const novel = await prisma.novel.findFirst({
       where: {
         id,
@@ -105,7 +122,10 @@ export const getNovelById = async (req: Request, res: Response) => {
           orderBy: { order: 'asc' },
           select: { id: true, title: true, titleEn: true, order: true, views: true }
         },
-        _count: { select: { likes: true, bookmarks: true } }
+        _count: { select: { likes: true, bookmarks: true } },
+        // Check if user has liked/bookmarked
+        likes: userId ? { where: { userId }, select: { id: true } } : false,
+        bookmarks: userId ? { where: { userId }, select: { id: true } } : false,
       }
     });
 
@@ -120,6 +140,10 @@ export const getNovelById = async (req: Request, res: Response) => {
 
     // 🔥 Optimized view increment (Redis REST)
     await incrementViewCount('novel', id);
+    
+    // 🚀 Get real-time total
+    const redisCount = await getRedisViewCount('novel', id);
+    const totalViews = (novel.views || 0) + redisCount;
 
     if (!novel.titleEn || !novel.descriptionEn) {
       addTranslationJob('novel', id);
@@ -128,9 +152,14 @@ export const getNovelById = async (req: Request, res: Response) => {
     // Normalize Data (Backend-side)
     const normalizedNovel = {
       ...novel,
-       coverImage: (novel as any).coverImageUrl,
-       author: (novel as any).author?.name || 'Unknown', // Keep for compatibility
-       authorName: (novel as any).author?.name || 'Unknown' // Normalized field
+      coverImage: (novel as any).coverImageUrl,
+      author: (novel as any).author?.name || 'Unknown', 
+      authorName: (novel as any).author?.name || 'Unknown',
+      views: totalViews,
+      isLiked: userId ? (novel.likes as any[]).length > 0 : false,
+      isBookmarked: userId ? (novel.bookmarks as any[]).length > 0 : false,
+      likes: undefined, // Clear nested relations
+      bookmarks: undefined
     };
 
     res.json(normalizedNovel);

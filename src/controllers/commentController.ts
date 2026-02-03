@@ -60,3 +60,26 @@ export const deleteComment = async (req: AuthRequest, res: Response): Promise<vo
     res.status(500).json({ message: 'Error deleting comment', error });
   }
 };
+
+// Public: Get comments for a chapter
+export const getCommentsByChapter = async (req: AuthRequest, res: Response): Promise<void> => {
+  const chapterId = String(req.params.id);
+  const cursor = Number(req.query.cursor || 0);
+  const limit = 20;
+
+  try {
+    const comments = await prisma.comment.findMany({
+      where: { chapterId },
+      include: {
+        user: { select: { id: true, name: true } }
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: cursor,
+      take: limit
+    });
+    
+    res.json({ success: true, data: comments });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching comments', error });
+  }
+};

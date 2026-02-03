@@ -7,11 +7,13 @@ import {
   likeChapter,
   unlikeChapter
 } from '../controllers/chapterController';
+import { getCommentsByChapter } from '../controllers/commentController';
 import { authenticate, authorizeRole } from '../middlewares/authMiddleware';
 
 const router = express.Router();
 
 router.get('/:id', getChapterById);
+router.get('/:id/comments', getCommentsByChapter);
 
 router.post('/', authenticate, authorizeRole('ADMIN'), createChapter);
 router.put('/:id', authenticate, authorizeRole('ADMIN'), updateChapter);

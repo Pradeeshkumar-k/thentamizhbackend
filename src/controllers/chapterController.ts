@@ -2,8 +2,9 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import prisma from '../utils/prisma';
 import { TranslationService } from '../services/translationService';
-import { incrementViewCount } from '../utils/redis';
+import { incrementViewCount, getRedisViewCount } from '../utils/redis';
 import { addTranslationJob } from '../utils/queue';
+import { decodeAccessToken } from '../utils/jwt';
 
 // Public: Get chapter content
 // 🚀 FAST & SAFE
@@ -22,9 +23,15 @@ export const getChapterById = async (req: Request, res: Response) => {
       req.socket.remoteAddress ||
       'unknown';
 
-    // Try to get userId if available
-    // @ts-ignore
-    const userId = (req as any).user?.userId || (req as any).user?.id || null;
+    // Try to get userId if available (Optional Auth)
+    let userId = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const payload = decodeAccessToken(authHeader.split(' ')[1]) as any;
+        userId = payload?.userId || payload?.id || null;
+      } catch {}
+    }
 
     // Count only once per 24 hours
     const TWENTY_FOUR_HOURS = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -51,6 +58,9 @@ export const getChapterById = async (req: Request, res: Response) => {
       await incrementViewCount('chapter', chapterId);
     }
 
+    // 🚀 Get real-time Redis increment
+    const redisCount = await getRedisViewCount('chapter', chapterId);
+
     const chapter = await prisma.chapter.findUnique({
       where: { id: chapterId },
       select: {
@@ -72,10 +82,8 @@ export const getChapterById = async (req: Request, res: Response) => {
           orderBy: { createdAt: 'desc' }
         },
         _count: {
-          select: { likes: true }
+          select: { likes: true, comments: true }
         },
-        // @ts-ignore
-        isTranslating: true,
         views: true
       }
     });
@@ -98,6 +106,7 @@ export const getChapterById = async (req: Request, res: Response) => {
 
     res.json({
       ...chapter,
+      views: (chapter.views || 0) + redisCount,
       chapterNumber: (chapter as any).order,
       likeCount: (chapter as any)._count?.likes ?? 0,
       likedByMe: userId
