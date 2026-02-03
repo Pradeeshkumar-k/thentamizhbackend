@@ -2,9 +2,10 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import prisma from '../utils/prisma';
 import { TranslationService } from '../services/translationService';
-import { incrementViewCount, getRedisViewCount } from '../utils/redis';
+import { prismaWrite } from '../utils/prismaWrite';
 import { addTranslationJob } from '../utils/queue';
 import { decodeAccessToken } from '../utils/jwt';
+import { getRedisViewCount } from '../utils/redis';
 
 // Public: Get chapter content
 // 🚀 FAST & SAFE
@@ -33,12 +34,8 @@ export const getChapterById = async (req: Request, res: Response) => {
       } catch {}
     }
 
-    // console.log(`[VIEW INCR] Chapter ${chapterId} for ${ip}`);
-    await prisma.chapterView.create({
-      data: { chapterId, userId, ip },
-    });
-    // Atomic Increment + Get
-    const redisCount = await incrementViewCount('chapter', chapterId);
+    // 🚀 Get real-time Redis increment
+    const redisCount = await getRedisViewCount('chapter', chapterId);
 
     const chapter = await prisma.chapter.findUnique({
       where: { id: chapterId },
@@ -218,5 +215,23 @@ export const unlikeChapter = async (req: AuthRequest, res: Response) => {
     res.json({ message: 'Chapter unliked' });
   } catch (error) {
     res.status(500).json({ message: 'Error unliking chapter', error: (error as any).message });
+  }
+};
+
+// Public: Increment view count for chapter
+export const incrementChapterView = async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  try {
+    await prismaWrite.chapter.update({
+      where: { id },
+      data: {
+        views: { increment: 1 }
+      }
+    });
+
+    return res.status(204).end(); 
+  } catch (error) {
+    console.error("INCREMENT CHAPTER VIEW ERROR:", error);
+    res.status(500).json({ message: "Error incrementing view" });
   }
 };

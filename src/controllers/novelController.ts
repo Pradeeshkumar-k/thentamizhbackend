@@ -2,7 +2,8 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import prisma from '../utils/prisma';
 import { TranslationService } from '../services/translationService';
-import { incrementViewCount, getRedisViewCount, getRedisViewCounts } from '../utils/redis';
+import { prismaWrite } from '../utils/prismaWrite';
+import { getRedisViewCount, getRedisViewCounts } from '../utils/redis';
 import { addTranslationJob } from '../utils/queue';
 import { decodeAccessToken } from '../utils/jwt';
 
@@ -56,7 +57,7 @@ export const getNovels = async (req: Request, res: Response) => {
         status: true,
         createdAt: true,
         author: { select: { name: true } },
-        _count: { select: { chapters: true, likes: true } }
+        _count: { select: { chapters: true, likes: true, bookmarks: true } }
       },
     });
 
@@ -141,8 +142,8 @@ export const getNovelById = async (req: Request, res: Response) => {
     // 🚫 No CDN cache for views
     res.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
 
-    // 🔥 Optimized view increment (Redis REST) - Atomic Increment + Get
-    const redisCount = await incrementViewCount('novel', id);
+    // 🚀 Get real-time total (From DB + Redis)
+    const redisCount = await getRedisViewCount('novel', id);
     const totalViews = (novel.views || 0) + redisCount;
 
     if (!novel.titleEn || !novel.descriptionEn) {
@@ -370,6 +371,23 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
   } catch (error) {
     console.error('getChaptersByNovel error:', error);
     res.status(500).json({ message: 'Error fetching chapters', error });
+  }
+};
+
+// Public: Increment view count for novel
+export const incrementNovelView = async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  try {
+    await prismaWrite.novel.update({
+      where: { id },
+      data: {
+        views: { increment: 1 }
+      }
+    });
+    return res.status(204).end();
+  } catch (error) {
+    console.error("INCREMENT NOVEL VIEW ERROR:", error);
+    res.status(500).json({ message: "Error incrementing view" });
   }
 };
 

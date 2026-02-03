@@ -5,7 +5,8 @@ import {
   updateChapter, 
   deleteChapter,
   likeChapter,
-  unlikeChapter
+  unlikeChapter,
+  incrementChapterView
 } from '../controllers/chapterController';
 import { getCommentsByChapter } from '../controllers/commentController';
 import { authenticate, authorizeRole } from '../middlewares/authMiddleware';
@@ -21,5 +22,8 @@ router.delete('/:id', authenticate, authorizeRole('ADMIN'), deleteChapter);
 
 router.post('/:id/like', authenticate, likeChapter);
 router.delete('/:id/like', authenticate, unlikeChapter);
+
+// View increment (Internal/Frontend call)
+router.post('/:id/view', incrementChapterView);
 
 export default router;

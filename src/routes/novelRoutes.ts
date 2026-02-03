@@ -5,7 +5,8 @@ import {
   getChaptersByNovel,
   createNovel, 
   updateNovel, 
-  deleteNovel 
+  deleteNovel,
+  incrementNovelView
 } from '../controllers/novelController';
 
 import { authenticate, authorizeRole } from '../middlewares/authMiddleware';
@@ -25,6 +26,7 @@ router.get('/bookmarks', authenticate, getBookmarkedNovels);
 
 router.get('/', getNovels);
 router.get('/:id', getNovelById);
+router.post('/:id/view', incrementNovelView);
 router.get('/:id/chapters', getChaptersByNovel);
 
 // Frontend compatibility route
