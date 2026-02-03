@@ -1,17 +1,12 @@
-import Redis from "ioredis"
+import Redis from 'ioredis';
 
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
-  lazyConnect: true,
-  retryStrategy: (times) => Math.min(times * 50, 2000),
-  maxRetriesPerRequest: 3,
+const redis = new Redis(process.env.REDIS_URL!, {
+  tls: {},
+  maxRetriesPerRequest: null,
+  enableReadyCheck: false,
 });
 
-redis.on('error', (err) => {
-  // Suppress connection errors to prevent app crash
-  console.error('[Redis Error] (Non-fatal):', err.message);
-});
-
-export default redis
+export default redis;
 
 export const incrementViewCount = async (
   type: "chapter" | "novel",
