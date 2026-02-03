@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
-import { prismaRead } from '../utils/prismaRead';
-import { prismaWrite } from '../utils/prismaWrite';
+import { prisma } from '../utils/prisma';
+import { prisma } from '../utils/prisma';
 import { TranslationService } from '../services/translationService';
 import redis, { getRedisViewCount, getRedisViewCounts, incrementViewCount } from '../utils/redis';
 import { addTranslationJob } from '../utils/queue';
@@ -42,7 +42,7 @@ export const getNovels = async (req: Request, res: Response) => {
       ];
     }
 
-    const novels = await prismaRead.novel.findMany({
+    const novels = await prisma.novel.findMany({
       take: limit,
       ...(cursor && { cursor: { id: cursor }, skip: 1 }),
       where,
@@ -60,16 +60,13 @@ export const getNovels = async (req: Request, res: Response) => {
       },
     });
 
-    // 🚀 Batch fetch real-time Redis increments (if enabled)
-    const novelIds = novels.map(n => n.id);
-    const redisIncrements: Record<string, number> = redis ? await getRedisViewCounts('novel', novelIds) : {};
 
     const normalized = novels.map(n => ({
       id: n.id,
       title: n.title,
       titleEn: n.titleEn,
       coverImage: n.coverImageUrl,
-      views: (n.views || 0) + (redisIncrements[n.id] || 0),
+      views: n.views || 0,
       createdAt: n.createdAt,
       authorName: n.author?.name ?? 'Unknown',
       totalChapters: n._count?.chapters || 0,
@@ -110,7 +107,7 @@ export const getNovelById = async (req: Request, res: Response) => {
   try {
     const userId = getUserIdFromHeader(req.headers.authorization);
 
-    const novel = await prismaRead.novel.findFirst({
+    const novel = await prisma.novel.findFirst({
       where: {
         id,
         status: 'PUBLISHED', 
@@ -143,9 +140,8 @@ export const getNovelById = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Not found" });
     }
 
-    // 🚀 Get real-time total (From DB + Redis)
-    const redisCount = redis ? Number(await getRedisViewCount('novel', id)) || 0 : 0;
-    const totalViews = (novel.views || 0) + redisCount;
+    // DB views only
+    const totalViews = novel.views || 0;
 
     if (!novel.titleEn || !novel.descriptionEn) {
       addTranslationJob('novel', id);
@@ -200,7 +196,7 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
     const dbCoverImage = coverImageUrl || cover_image;
     let dbStatus = status ? status.toUpperCase() : 'DRAFT'; 
 
-    const novel = await prismaWrite.novel.create({
+    const novel = await prisma.novel.create({
       data: {
         title,
         titleEn: title_en || titleEn,
@@ -235,7 +231,7 @@ export const updateNovel = async (req: Request, res: Response) => {
   } = req.body;
 
   try {
-    const existing = await prismaRead.novel.findUnique({ where: { id } });
+    const existing = await prisma.novel.findUnique({ where: { id } });
     if (!existing) {
       res.status(404).json({ message: 'Novel not found' });
       return;
@@ -252,7 +248,7 @@ export const updateNovel = async (req: Request, res: Response) => {
     if (summary_en || descriptionEn) dbData.descriptionEn = summary_en || descriptionEn;
     if (status) dbData.status = status.toUpperCase();
 
-    const novel = await prismaWrite.novel.update({
+    const novel = await prisma.novel.update({
       where: { id },
       data: dbData,
     });
@@ -273,7 +269,7 @@ export const deleteNovel = async (req: Request, res: Response) => {
 
     setImmediate(async () => {
         try {
-            await prismaWrite.novel.update({
+            await prisma.novel.update({
                 where: { id },
                 data: { 
                     status: 'DELETED',
@@ -300,7 +296,7 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
     res.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
     const id = String(req.params.id);
 
-    const chapters = await prismaRead.chapter.findMany({
+    const chapters = await prisma.chapter.findMany({
       where: { novelId: id },
       orderBy: { order: 'asc' },
       select: {
@@ -315,8 +311,6 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
       }
     });
 
-    const chapterIds = chapters.map(c => c.id);
-    const redisIncrements: Record<string, number> = redis ? await getRedisViewCounts('chapter', chapterIds) : {};
 
     const formattedChapters = chapters.map((ch: any) => ({
       _id: ch.id,
@@ -326,7 +320,7 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
       titleEn: (ch as any).titleEn,
       chapterNumber: ch.order,
       order: ch.order,
-      views: (ch.views || 0) + (redisIncrements[ch.id] || 0),
+      views: ch.views || 0,
       thumbnail: ch.thumbnailUrl,
       createdAt: ch.createdAt,
       updatedAt: ch.updatedAt
@@ -353,25 +347,11 @@ export const incrementNovelView = async (req: Request, res: Response) => {
     'unknown';
 
   try {
-    // Deduplicate using Redis (24 hours)
-    if (redis) {
-      const dedupKey = `viewed:novel:${id}:${ip}`;
-      const alreadyViewed = await redis.get(dedupKey);
-
-      if (!alreadyViewed) {
-        // Set key with 24h expiry (86400 seconds)
-        await redis.setex(dedupKey, 86400, '1');
-        
-        // Increment counter
-        await incrementViewCount('novel', id);
-      }
-    } else {
-      // Fallback: Direct DB increment if Redis is disabled
-      await prismaWrite.novel.update({
-        where: { id },
-        data: { views: { increment: 1 } },
-      });
-    }
+    // Direct DB increment
+    await prisma.novel.update({
+      where: { id },
+      data: { views: { increment: 1 } },
+    });
 
     return res.status(204).end();
   } catch (error) {

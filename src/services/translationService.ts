@@ -1,8 +1,8 @@
 import { OpenAI } from 'openai';
 import { translate } from 'google-translate-api-x';
 import dotenv from 'dotenv';
-import { prismaRead } from '../utils/prismaRead';
-import { prismaWrite } from '../utils/prismaWrite';
+import { prisma } from '../utils/prisma';
+import { prisma } from '../utils/prisma';
 import { invalidateNovelCache } from '../controllers/novelController';
 
 const log = (msg: string) => {
@@ -109,7 +109,7 @@ export const TranslationService = {
 
   translateAndSaveNovel: async (novelId: string): Promise<void> => {
     try {
-      const novel = await prismaRead.novel.findUnique({ where: { id: novelId } });
+      const novel = await prisma.novel.findUnique({ where: { id: novelId } });
       if (!novel) return;
 
       // Simple check (race condition possible but better than 500 crash)
@@ -159,7 +159,7 @@ export const TranslationService = {
       }
 
       if (needsUpdate) {
-          await prismaWrite.novel.update({
+          await prisma.novel.update({
               where: { id: novelId },
               data: updates
           });
@@ -178,7 +178,7 @@ export const TranslationService = {
   translateAndSaveChapter: async (chapterId: string): Promise<string | null> => {
     try {
       const start = Date.now();
-      const chapter = await prismaRead.chapter.findUnique({ where: { id: chapterId } });
+      const chapter = await prisma.chapter.findUnique({ where: { id: chapterId } });
       
       // @ts-ignore
       if (!chapter || chapter.contentEn || chapter.isTranslating) {
@@ -186,7 +186,7 @@ export const TranslationService = {
       }
 
       // Lock
-      await prismaWrite.chapter.update({
+      await prisma.chapter.update({
         where: { id: chapterId },
         // @ts-ignore
         data: { isTranslating: true }
@@ -204,7 +204,7 @@ export const TranslationService = {
 
         const fullTranslation = translatedChunks.join('\n\n');
 
-        await prismaWrite.chapter.update({
+        await prisma.chapter.update({
           where: { id: chapterId },
           data: { contentEn: fullTranslation }
         });
@@ -218,7 +218,7 @@ export const TranslationService = {
         return fullTranslation;
       } finally {
         // Unlock
-        await prismaWrite.chapter.update({
+        await prisma.chapter.update({
           where: { id: chapterId },
           // @ts-ignore
           data: { isTranslating: false }

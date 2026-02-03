@@ -1,23 +1,9 @@
-// utils/redis.ts
-// 🔴 REDIS COMPLETELY DISABLED (STABILITY MODE)
+// REDIS COMPLETELY DISABLED - NO IMPORTS, NO CONNECTIONS
 
-console.log("[REDIS] fully disabled");
+export default null;
 
-const redis: any = null;
-export default redis;
+export const incrementViewCount = async (type: "chapter" | "novel", id: string) => 0;
 
-// ---- Safe no-op helpers ----
-export const incrementViewCount = async (
-  type: "chapter" | "novel",
-  id: string
-) => 0;
+export const getRedisViewCount = async (type: "chapter" | "novel", id: string) => 0;
 
-export const getRedisViewCount = async (
-  type: "chapter" | "novel",
-  id: string
-) => 0;
-
-export const getRedisViewCounts = async (
-  type: "chapter" | "novel",
-  ids: string[]
-) => ({});
+export const getRedisViewCounts = async (type: "chapter" | "novel", ids: string[]) => ({});

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
-import { prismaRead } from '../utils/prismaRead';
-import { prismaWrite } from '../utils/prismaWrite';
+import { prisma } from '../utils/prisma';
+import { prisma } from '../utils/prisma';
 import { translateContent as performTranslation } from '../services/translationService';
 // Import Cache Invalidation
 import { invalidateNovelCache } from './novelController';
@@ -14,15 +14,15 @@ import { invalidateNovelCache } from './novelController';
 export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const [totalNovels, totalChapters, totalUsers, totalComments, totalSubscriptions] = await Promise.all([
-      prismaRead.novel.count(),
-      prismaRead.chapter.count(),
-      prismaRead.user.count(),
-      prismaRead.comment.count(),
-      prismaRead.bookmark.count()
+      prisma.novel.count(),
+      prisma.chapter.count(),
+      prisma.user.count(),
+      prisma.comment.count(),
+      prisma.bookmark.count()
     ]);
 
     // Get recent activity (last 10 novels)
-    const recentNovels = await prismaRead.novel.findMany({
+    const recentNovels = await prisma.novel.findMany({
       take: 10,
       orderBy: { createdAt: 'desc' },
       select: {
@@ -84,7 +84,7 @@ export const getAllNovelsAdmin = async (req: AuthRequest, res: Response): Promis
     const skip = (Number(page) - 1) * Number(limit);
     
     const [novels, total] = await Promise.all([
-      prismaRead.novel.findMany({
+      prisma.novel.findMany({
         where,
         skip,
         take: Number(limit),
@@ -105,7 +105,7 @@ export const getAllNovelsAdmin = async (req: AuthRequest, res: Response): Promis
         },
         orderBy: { createdAt: 'desc' }
       }),
-      prismaRead.novel.count({ where })
+      prisma.novel.count({ where })
     ]);
 
     const formattedNovels = novels.map((novel: any) => ({
@@ -139,7 +139,7 @@ export const getNovelByIdAdmin = async (req: AuthRequest, res: Response): Promis
   try {
     const { id } = req.params as { id: string };
 
-    const novel = await prismaRead.novel.findUnique({
+    const novel = await prisma.novel.findUnique({
       where: { id },
       include: {
         author: {
@@ -192,7 +192,7 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
     const finalStatus = (status || 'DRAFT').toUpperCase() as any;
     const finalCoverImageUrl = coverImageUrl || cover_image || '';
 
-    const novel = await prismaWrite.novel.create({
+    const novel = await prisma.novel.create({
       data: {
         title,
         description: finalDescription,
@@ -235,14 +235,14 @@ export const updateNovel = async (req: AuthRequest, res: Response): Promise<void
     if (finalStatus !== undefined) data.status = finalStatus;
     if (finalCoverImageUrl !== undefined) data.coverImageUrl = finalCoverImageUrl;
 
-    const novel = await prismaWrite.novel.update({
+    const novel = await prisma.novel.update({
       where: { id },
       data
     });
 
     // CASCADE: If cover image is updated, update all chapters as well
     if (finalCoverImageUrl) {
-      await prismaWrite.chapter.updateMany({
+      await prisma.chapter.updateMany({
         where: { novelId: id },
         data: { thumbnailUrl: finalCoverImageUrl }
       });
@@ -266,7 +266,7 @@ export const updateNovel = async (req: AuthRequest, res: Response): Promise<void
 
 export const deleteNovel = async (req: Request, res: Response) => {
   try {
-    await prismaWrite.novel.update({
+    await prisma.novel.update({
       where: { id: String(req.params.id) },
       data: {
         status: 'DELETED' as any,
@@ -290,7 +290,7 @@ export const getChaptersByNovel = async (req: AuthRequest, res: Response): Promi
   try {
     const { novelId } = req.params as { novelId: string };
 
-    const chapters = await prismaRead.chapter.findMany({
+    const chapters = await prisma.chapter.findMany({
       where: { novelId },
       orderBy: { order: 'asc' }
     });
@@ -320,7 +320,7 @@ export const getChapterById = async (req: AuthRequest, res: Response): Promise<v
   try {
     const { id } = req.params as { id: string };
 
-    const chapter = await prismaRead.chapter.findUnique({
+    const chapter = await prisma.chapter.findUnique({
       where: { id }
     });
 
@@ -363,7 +363,7 @@ export const createChapter = async (req: AuthRequest, res: Response): Promise<vo
        return;
     }
 
-    const chapter = await prismaWrite.chapter.create({
+    const chapter = await prisma.chapter.create({
       data: {
         novelId,
         title: finalTitle,
@@ -406,7 +406,7 @@ export const updateChapter = async (req: AuthRequest, res: Response): Promise<vo
     if (finalOrder !== undefined) data.order = finalOrder;
     if (finalThumbnailUrl !== undefined) data.thumbnailUrl = finalThumbnailUrl;
 
-    const chapter = await prismaWrite.chapter.update({
+    const chapter = await prisma.chapter.update({
       where: { id },
       data
     });
@@ -427,7 +427,7 @@ export const deleteChapter = async (req: AuthRequest, res: Response): Promise<vo
   try {
     const { id } = req.params as { id: string };
 
-    const existing = await prismaRead.chapter.findUnique({ where: { id } });
+    const existing = await prisma.chapter.findUnique({ where: { id } });
     if (!existing) {
       res.status(404).json({ message: 'Chapter not found' });
       return;
@@ -435,12 +435,12 @@ export const deleteChapter = async (req: AuthRequest, res: Response): Promise<vo
 
     // Manual Cascade Delete (Sequential - No Transaction)
     // 1. Delete Dependencies
-    await prismaRead.comment.deleteMany({ where: { chapterId: id } });
-    await prismaRead.like.deleteMany({ where: { chapterId: id } });
-    await prismaRead.readingProgress.deleteMany({ where: { chapterId: id } });
+    await prisma.comment.deleteMany({ where: { chapterId: id } });
+    await prisma.like.deleteMany({ where: { chapterId: id } });
+    await prisma.readingProgress.deleteMany({ where: { chapterId: id } });
 
     // 2. Delete Chapter
-    await prismaWrite.chapter.delete({ where: { id } });
+    await prisma.chapter.delete({ where: { id } });
 
     res.json({
       success: true,
@@ -555,7 +555,7 @@ export const translateContent = async (req: AuthRequest, res: Response): Promise
 
 export const listAllDebug = async (req: Request, res: Response): Promise<void> => {
     try {
-        const novels = await prismaRead.novel.findMany({ select: { id: true, title: true, status: true, authorId: true } });
+        const novels = await prisma.novel.findMany({ select: { id: true, title: true, status: true, authorId: true } });
         res.json({ count: novels.length, novels });
     } catch (e: any) {
         res.status(500).json({ error: e.message });
@@ -571,41 +571,41 @@ export const forceDeleteDebug = async (req: Request, res: Response): Promise<voi
         log(`Starting Force Delete for ${id}`);
         
         // 1. Reading Progress
-        const rp = await prismaRead.readingProgress.deleteMany({ where: { novelId: id } });
+        const rp = await prisma.readingProgress.deleteMany({ where: { novelId: id } });
         log(`Deleted ${rp.count} ReadingProgress records`);
 
         // 2. Bookmarks
-        const bk = await prismaWrite.bookmark.deleteMany({ where: { novelId: id } });
+        const bk = await prisma.bookmark.deleteMany({ where: { novelId: id } });
         log(`Deleted ${bk.count} Bookmarks`);
 
         // 3. Novel Likes
-        const nl = await prismaWrite.novelLike.deleteMany({ where: { novelId: id } });
+        const nl = await prisma.novelLike.deleteMany({ where: { novelId: id } });
         log(`Deleted ${nl.count} NovelLikes`);
 
         // 4. Get Chapters
-        const chapters = await prismaRead.chapter.findMany({ where: { novelId: id }, select: { id: true } });
+        const chapters = await prisma.chapter.findMany({ where: { novelId: id }, select: { id: true } });
         log(`Found ${chapters.length} chapters`);
         const chIds = chapters.map(c => c.id);
 
         if (chIds.length > 0) {
             // 5. Chapter Children
-            const cm = await prismaRead.comment.deleteMany({ where: { chapterId: { in: chIds } } });
+            const cm = await prisma.comment.deleteMany({ where: { chapterId: { in: chIds } } });
             log(`Deleted ${cm.count} Comments`);
             
-            const cl = await prismaRead.like.deleteMany({ where: { chapterId: { in: chIds } } });
+            const cl = await prisma.like.deleteMany({ where: { chapterId: { in: chIds } } });
             log(`Deleted ${cl.count} ChapterLikes`);
 
             // Extra safety for ReadingProgress by chapter if any stray ones exist
-            const rpCh = await prismaRead.readingProgress.deleteMany({ where: { chapterId: { in: chIds } } });
+            const rpCh = await prisma.readingProgress.deleteMany({ where: { chapterId: { in: chIds } } });
             log(`Deleted ${rpCh.count} stray ReadingProgress by Chapter`);
 
             // 6. Delete Chapters
-            const chDel = await prismaRead.chapter.deleteMany({ where: { novelId: id } });
+            const chDel = await prisma.chapter.deleteMany({ where: { novelId: id } });
             log(`Deleted ${chDel.count} Chapters`);
         }
 
         // 7. Delete Novel
-        const nDel = await prismaRead.novel.delete({ where: { id } });
+        const nDel = await prisma.novel.delete({ where: { id } });
         log(`Deleted Novel: ${nDel.title}`);
 
         invalidateNovelCache();

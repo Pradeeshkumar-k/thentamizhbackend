@@ -1,22 +1,22 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import bcrypt from 'bcryptjs';
-import { prismaRead } from '../utils/prismaRead';
-import { prismaWrite } from '../utils/prismaWrite';
+import { prisma } from '../utils/prisma';
+import { prisma } from '../utils/prisma';
 import { generateTokens, verifyRefreshToken } from '../utils/jwt';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   const { email, password, role, username, name } = req.body;
 
   try {
-    const existingUser = await prismaRead.user.findUnique({ where: { email } });
+    const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       res.status(400).json({ message: 'User already exists' });
       return;
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await prismaWrite.user.create({
+    const user = await prisma.user.create({
       data: {
         email,
         passwordHash,
@@ -46,7 +46,7 @@ export const login = async (req: Request, res: Response) => {
     }
 
     // ✅ Find user
-    const user = await prismaRead.user.findFirst({
+    const user = await prisma.user.findFirst({
       where: {
         OR: [
           { email: loginIdentifier },
@@ -97,7 +97,7 @@ export const verifyToken = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const user = await prismaRead.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: userId },
     });
 
@@ -126,7 +126,7 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
     const payload = verifyRefreshToken(refreshToken) as { userId: string; role: string };
     
     // Optional: Check if user still exists/is active
-    const user = await prismaRead.user.findUnique({ where: { id: payload.userId } });
+    const user = await prisma.user.findUnique({ where: { id: payload.userId } });
     if (!user) {
       res.status(401).json({ message: 'User not found' });
       return;

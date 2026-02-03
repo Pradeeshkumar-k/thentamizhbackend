@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
-import { prismaRead } from '../utils/prismaRead';
-import { prismaWrite } from '../utils/prismaWrite';
+import { prisma } from '../utils/prisma';
+import { prisma } from '../utils/prisma';
 import { TranslationService } from '../services/translationService';
 import { addTranslationJob } from '../utils/queue';
 import { decodeAccessToken } from '../utils/jwt';
@@ -27,10 +27,8 @@ export const getChapterById = async (req: Request, res: Response) => {
       } catch {}
     }
 
-    // 🚀 Get real-time Redis increment buffer (READ ONLY)
-    const redisCount = redis ? Number(await getRedisViewCount('chapter', chapterId)) || 0 : 0;
 
-    const chapter = await prismaRead.chapter.findUnique({
+    const chapter = await prisma.chapter.findUnique({
       where: { id: chapterId },
       select: {
         id: true,
@@ -70,7 +68,7 @@ export const getChapterById = async (req: Request, res: Response) => {
 
     res.json({
       ...chapter,
-      views: (chapter.views || 0) + redisCount,
+      views: chapter.views || 0,
       chapterNumber: (chapter as any).order,
       likeCount: (chapter as any)._count?.likes ?? 0,
       likedByMe: userId
@@ -88,7 +86,7 @@ export const getChapterById = async (req: Request, res: Response) => {
 export const createChapter = async (req: Request, res: Response): Promise<void> => {
   const { novelId, title, content, order, thumbnailUrl } = req.body;
   try {
-    const chapter = await prismaWrite.chapter.create({
+    const chapter = await prisma.chapter.create({
       data: {
         novelId,
         title,
@@ -108,13 +106,13 @@ export const updateChapter = async (req: Request, res: Response) => {
   const { id } = req.params as { id: string };
   const { title, content, order, thumbnailUrl } = req.body;
   try {
-    const existing = await prismaRead.chapter.findUnique({ where: { id } });
+    const existing = await prisma.chapter.findUnique({ where: { id } });
     if (!existing) {
       res.status(404).json({ message: 'Chapter not found' });
       return;
     }
 
-    const chapter = await prismaWrite.chapter.update({
+    const chapter = await prisma.chapter.update({
       where: { id },
       data: { title, content, order, thumbnailUrl },
     });
@@ -128,13 +126,13 @@ export const updateChapter = async (req: Request, res: Response) => {
 export const deleteChapter = async (req: Request, res: Response) => {
   const { id } = req.params as { id: string };
   try {
-    const existing = await prismaRead.chapter.findUnique({ where: { id } });
+    const existing = await prisma.chapter.findUnique({ where: { id } });
     if (!existing) {
       res.status(404).json({ message: 'Chapter not found' });
       return;
     }
 
-    await prismaWrite.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
         await tx.comment.deleteMany({ where: { chapterId: id } });
         await tx.like.deleteMany({ where: { chapterId: id } });
         await tx.readingProgress.deleteMany({ where: { chapterId: id } });
@@ -158,7 +156,7 @@ export const likeChapter = async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  await prismaWrite.like.upsert({
+  await prisma.like.upsert({
     where: {
       chapterId_userId: {
         chapterId: id,
@@ -186,7 +184,7 @@ export const unlikeChapter = async (req: AuthRequest, res: Response) => {
   }
 
   try {
-    await prismaWrite.like.delete({
+    await prisma.like.delete({
       where: {
         chapterId_userId: {
           chapterId: id,
@@ -221,7 +219,7 @@ export const incrementChapterView = async (req: Request, res: Response) => {
 
   try {
     // 1️⃣ Dedup (24h)
-    const exists = await prismaRead.chapterView.findFirst({
+    const exists = await prisma.chapterView.findFirst({
       where: {
         chapterId,
         OR: [
@@ -235,19 +233,14 @@ export const incrementChapterView = async (req: Request, res: Response) => {
     });
 
     if (!exists) {
-      if (!redis) {
-        // Fallback: Direct DB increment if Redis is disabled
-        await prismaWrite.chapter.update({
-          where: { id: chapterId },
-          data: { views: { increment: 1 } },
-        });
-      } else {
-        // 2️⃣ Redis increment (REAL-TIME)
-        await incrementViewCount('chapter', chapterId);
-      }
+      // Direct DB increment
+      await prisma.chapter.update({
+        where: { id: chapterId },
+        data: { views: { increment: 1 } },
+      });
 
       // 3️⃣ Fire-and-forget history log
-      prismaWrite.chapterView.create({
+      prisma.chapterView.create({
         data: { chapterId, userId, ip }
       }).catch(console.error);
     }

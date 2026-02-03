@@ -1,13 +1,17 @@
-// @ts-ignore
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 import { PrismaClient } from '@prisma/client';
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
+const globalForPrisma = global as unknown as {
+  prisma?: PrismaClient;
+};
 
-export const prisma = globalForPrisma.prisma || new PrismaClient({
-  log: ['error', 'warn'],
-});
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    datasources: {
+      db: { url: process.env.DIRECT_URL },
+    },
+  });
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
-
-export default prisma;
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma;
+}

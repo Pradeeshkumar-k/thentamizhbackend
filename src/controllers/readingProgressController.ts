@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
-import { prismaRead } from '../utils/prismaRead';
-import { prismaWrite } from '../utils/prismaWrite';
+import { prisma } from '../utils/prisma';
+import { prisma } from '../utils/prisma';
 
 // Update Reading Progress
 export const updateReadingProgress = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -23,7 +23,7 @@ export const updateReadingProgress = async (req: AuthRequest, res: Response): Pr
     }
 
     // Upsert progress (Create or Update)
-    const readingProgress = await prismaWrite.readingProgress.upsert({
+    const readingProgress = await prisma.readingProgress.upsert({
       where: {
         userId_novelId: {
           userId,
@@ -64,7 +64,7 @@ export const getReadingProgress = async (req: AuthRequest, res: Response): Promi
 
     // If novelId is provided, get progress for that specific novel
     if (novelId) {
-      const progress = await prismaRead.readingProgress.findUnique({
+      const progress = await prisma.readingProgress.findUnique({
         where: {
           userId_novelId: {
             userId,
@@ -87,7 +87,7 @@ export const getReadingProgress = async (req: AuthRequest, res: Response): Promi
 
     // If no novelId, return ALL progress for the user
     // For now, let's just return all as "ongoing" or categorize them
-    const allProgress = await prismaRead.readingProgress.findMany({
+    const allProgress = await prisma.readingProgress.findMany({
       where: { userId },
       include: {
         novel: {
