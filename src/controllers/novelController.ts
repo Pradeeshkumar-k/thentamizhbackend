@@ -25,7 +25,11 @@ export const invalidateNovelCache = () => {
 };
 
 export const getNovels = async (req: Request, res: Response) => {
+  console.log('[GET NOVELS] start');
   try {
+    // DEBUG: Connectivity check
+    await prismaRead.novel.findMany({ take: 1 });
+    console.log('[GET NOVELS] success');
     const limit = 20;
     const cursor = req.query.cursor as string | undefined;
     const search = req.query.search?.toString();
