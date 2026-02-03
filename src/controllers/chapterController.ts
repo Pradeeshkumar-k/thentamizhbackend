@@ -5,7 +5,7 @@ import { prismaWrite } from '../utils/prismaWrite';
 import { TranslationService } from '../services/translationService';
 import { addTranslationJob } from '../utils/queue';
 import { decodeAccessToken } from '../utils/jwt';
-import { getRedisViewCount, incrementViewCount } from '../utils/redis';
+import redis, { getRedisViewCount, incrementViewCount } from '../utils/redis';
 
 // Public: Get chapter content
 // 🚀 FAST & SAFE - READ ONLY
@@ -243,9 +243,17 @@ export const incrementChapterView = async (req: Request, res: Response) => {
     });
 
     if (!exists) {
-      // 2️⃣ Redis increment (REAL-TIME)
-      await incrementViewCount('chapter', chapterId);
-      console.log('[VIEW]', 'chapter', chapterId);
+      if (!redis) {
+        // Fallback: Direct DB increment if Redis is disabled
+        await prismaWrite.chapter.update({
+          where: { id: chapterId },
+          data: { views: { increment: 1 } },
+        });
+      } else {
+        // 2️⃣ Redis increment (REAL-TIME)
+        await incrementViewCount('chapter', chapterId);
+        console.log('[VIEW]', 'chapter', chapterId);
+      }
 
       // 3️⃣ Fire-and-forget history log
       prismaWrite.chapterView.create({

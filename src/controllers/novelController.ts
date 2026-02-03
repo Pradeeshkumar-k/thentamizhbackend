@@ -381,6 +381,13 @@ export const incrementNovelView = async (req: Request, res: Response) => {
         await incrementViewCount('novel', id);
         console.log('[VIEW]', 'novel', id);
       }
+    } else {
+      // Fallback: Direct DB increment if Redis is disabled
+      await prismaWrite.novel.update({
+        where: { id },
+        data: { views: { increment: 1 } },
+      });
+      console.log('[VIEW DB]', 'novel', id);
     }
 
     return res.status(204).end();
