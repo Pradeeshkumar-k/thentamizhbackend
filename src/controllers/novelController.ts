@@ -95,8 +95,13 @@ export const getNovels = async (req: Request, res: Response) => {
       hasMore: novels.length === limit,
     });
   } catch (err) {
-    console.error('[GET NOVELS]', err);
-    res.status(500).json({ message: 'Server error' });
+    console.error('[GET NOVELS ERROR]', err);
+    console.error('[GET NOVELS STACK]', (err as Error).stack);
+    console.error('[ENV CHECK] DIRECT_URL exists:', !!process.env.DIRECT_URL);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? (err as Error).message : undefined
+    });
   }
 };
 
