@@ -41,6 +41,18 @@ export const getNovels = async (req: Request, res: Response) => {
       ];
     }
 
+    console.log('[GET NOVELS] Starting request...');
+    console.log('[GET NOVELS] limit:', limit);
+    
+    // Test Connection
+    try {
+        await prisma.$queryRaw`SELECT 1`;
+        console.log('[GET NOVELS] DB Connection OK');
+    } catch (dbError) {
+        console.error('[GET NOVELS] DB Connection FAILED', dbError);
+        throw dbError;
+    }
+
     const novels = await prisma.novel.findMany({
       take: limit,
       ...(cursor && { cursor: { id: cursor }, skip: 1 }),
