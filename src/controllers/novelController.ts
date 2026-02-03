@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
-import prisma from '../utils/prisma';
-import { TranslationService } from '../services/translationService';
+import { prismaRead } from '../utils/prismaRead';
 import { prismaWrite } from '../utils/prismaWrite';
+import { TranslationService } from '../services/translationService';
 import { getRedisViewCount, getRedisViewCounts } from '../utils/redis';
 import { addTranslationJob } from '../utils/queue';
 import { decodeAccessToken } from '../utils/jwt';
@@ -18,7 +18,6 @@ const getUserIdFromHeader = (authHeader?: string): string | null => {
     return null;
   }
 };
-
 
 // Cache Invalidation (No-op as in-memory cache is removed)
 export const invalidateNovelCache = () => {
@@ -43,7 +42,7 @@ export const getNovels = async (req: Request, res: Response) => {
       ];
     }
 
-    const novels = await prisma.novel.findMany({
+    const novels = await prismaRead.novel.findMany({
       take: limit,
       ...(cursor && { cursor: { id: cursor }, skip: 1 }),
       where,
@@ -106,7 +105,7 @@ export const getNovelById = async (req: Request, res: Response) => {
   try {
     const userId = getUserIdFromHeader(req.headers.authorization);
 
-    const novel = await prisma.novel.findFirst({
+    const novel = await prismaRead.novel.findFirst({
       where: {
         id,
         status: 'PUBLISHED', 
@@ -173,9 +172,7 @@ export const getNovelById = async (req: Request, res: Response) => {
 
 
 // Admin: Create novel
-// Admin: Create novel
 export const createNovel = async (req: AuthRequest, res: Response): Promise<void> => {
-  // Destructure all possible frontend fields
   const { 
       title, 
       description, novel_summary, 
@@ -192,23 +189,16 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
   }
 
   try {
-    // Logic to determine final DB values
     const dbDescription = description || novel_summary;
-    
     let dbGenre = genre;
     if (!dbGenre) {
         if (categories && Array.isArray(categories)) dbGenre = categories.join(',');
         else if (categories) dbGenre = String(categories);
     }
-
     const dbCoverImage = coverImageUrl || cover_image;
-    
-    // Status normalization
     let dbStatus = status ? status.toUpperCase() : 'DRAFT'; 
-    // Validate Status against Enum if needed, but Prisma will throw if invalid. 
-    // Frontend likely sends 'Draft', 'Published'.
 
-    const novel = await prisma.novel.create({
+    const novel = await prismaWrite.novel.create({
       data: {
         title,
         titleEn: title_en || titleEn,
@@ -221,9 +211,7 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
       },
     });
 
-    // Invalidate Cache
     invalidateNovelCache();
-
     res.status(201).json(novel);
   } catch (error: any) {
     console.error('createNovel error:', error);
@@ -234,7 +222,6 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
 // Admin: Update novel
 export const updateNovel = async (req: Request, res: Response) => {
   const id = String(req.params.id);
-  // Destructure all possible fields from frontend
   const { 
       title, 
       description, novel_summary, 
@@ -246,41 +233,29 @@ export const updateNovel = async (req: Request, res: Response) => {
   } = req.body;
 
   try {
-    const existing = await prisma.novel.findUnique({ where: { id } });
+    const existing = await prismaRead.novel.findUnique({ where: { id } });
     if (!existing) {
       res.status(404).json({ message: 'Novel not found' });
       return;
     }
 
-    // Map Frontend fields to DB fields
     const dbData: any = {};
     if (title) dbData.title = title;
-    // Map 'novel_summary' (frontend) -> 'description' (db)
     if (description || novel_summary) dbData.description = description || novel_summary;
-    
-    // Map 'categories' (frontend array) -> 'genre' (db string)
     if (genre) dbData.genre = genre;
     else if (categories && Array.isArray(categories)) dbData.genre = categories.join(',');
     else if (categories) dbData.genre = String(categories);
-
-    // Map 'cover_image' (frontend) -> 'coverImageUrl' (db)
     if (coverImageUrl || cover_image) dbData.coverImageUrl = coverImageUrl || cover_image;
-
-    // English Interface Fields
     if (title_en || titleEn) dbData.titleEn = title_en || titleEn;
     if (summary_en || descriptionEn) dbData.descriptionEn = summary_en || descriptionEn;
-
-    // Status: Convert 'Published' -> 'PUBLISHED'
     if (status) dbData.status = status.toUpperCase();
 
-    const novel = await prisma.novel.update({
+    const novel = await prismaWrite.novel.update({
       where: { id },
       data: dbData,
     });
 
-    // Invalidate Cache
     invalidateNovelCache();
-
     res.json({ success: true, data: novel });
   } catch (error: any) {
     console.error('updateNovel error:', error);
@@ -289,18 +264,14 @@ export const updateNovel = async (req: Request, res: Response) => {
 };
 
 // Admin: Delete novel
-// Admin: Delete novel
-// Admin: Delete novel
 export const deleteNovel = async (req: Request, res: Response) => {
   const id = String(req.params.id);
   try {
-    // Respond early to prevent timeouts
     res.status(202).json({ message: 'Deletion processing in background' });
 
-    // Run soft deletion async (fire-and-forget)
     setImmediate(async () => {
         try {
-            await prisma.novel.update({
+            await prismaWrite.novel.update({
                 where: { id },
                 data: { 
                     status: 'DELETED',
@@ -308,7 +279,6 @@ export const deleteNovel = async (req: Request, res: Response) => {
                     deletedAt: new Date() 
                 }
             });
-
             invalidateNovelCache();
             console.log(`[SOFT DELETE] Novel ${id} marked as deleted`);
         } catch (err) {
@@ -325,12 +295,10 @@ export const deleteNovel = async (req: Request, res: Response) => {
 // Public: Get chapters for a novel
 export const getChaptersByNovel = async (req: Request, res: Response): Promise<void> => {
   try {
-    // 🚫 No CDN cache for views
     res.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
-
     const id = String(req.params.id);
 
-    const chapters = await prisma.chapter.findMany({
+    const chapters = await prismaRead.chapter.findMany({
       where: { novelId: id },
       orderBy: { order: 'asc' },
       select: {
@@ -345,11 +313,9 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
       }
     });
 
-    // 🚀 NEW: Batch fetch real-time Redis increments for all chapters
     const chapterIds = chapters.map(c => c.id);
     const redisIncrements = await getRedisViewCounts('chapter', chapterIds);
 
-    // Map to frontend expected format
     const formattedChapters = chapters.map((ch: any) => ({
       _id: ch.id,
       id: ch.id,
@@ -374,7 +340,7 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
   }
 };
 
-// Public: Increment view count for novel
+// Public: Increment view count for novel (REAL-TIME FIX)
 export const incrementNovelView = async (req: Request, res: Response) => {
   const id = String(req.params.id);
   try {
@@ -390,4 +356,3 @@ export const incrementNovelView = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Error incrementing view" });
   }
 };
-

@@ -1,4 +1,4 @@
-import prisma from '../utils/prisma';
+import { prismaWrite } from '../utils/prismaWrite';
 import redis from '../utils/redis';
 
 /**
@@ -20,7 +20,7 @@ export const syncViewsToDb = async () => {
       const count = Number(await redis.get(key));
 
       if (count > 0) {
-        await prisma.novel.update({
+        await prismaWrite.novel.update({
           where: { id: novelId },
           data: { views: { increment: count } },
         });
@@ -38,7 +38,7 @@ export const syncViewsToDb = async () => {
       const count = Number(await redis.get(key));
 
       if (count > 0) {
-        await prisma.chapter.update({
+        await prismaWrite.chapter.update({
           where: { id: chapterId },
           data: { views: { increment: count } },
         });

@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
-import prisma from '../utils/prisma';
+import { prismaRead } from '../utils/prismaRead';
+import { prismaWrite } from '../utils/prismaWrite';
 
 // User: Add comment
 export const addComment = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -13,7 +14,7 @@ export const addComment = async (req: AuthRequest, res: Response): Promise<void>
   }
 
   try {
-    const comment = await prisma.comment.create({
+    const comment = await prismaWrite.comment.create({
       data: {
         text,
         chapterId,
@@ -41,7 +42,7 @@ export const deleteComment = async (req: AuthRequest, res: Response): Promise<vo
   }
 
   try {
-    const comment = await prisma.comment.findUnique({ where: { id } });
+    const comment = await prismaRead.comment.findUnique({ where: { id } });
     
     if (!comment) {
       res.status(404).json({ message: 'Comment not found' });
@@ -54,7 +55,7 @@ export const deleteComment = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    await prisma.comment.delete({ where: { id } });
+    await prismaWrite.comment.delete({ where: { id } });
     res.json({ message: 'Comment deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting comment', error });
@@ -68,7 +69,7 @@ export const getCommentsByChapter = async (req: AuthRequest, res: Response): Pro
   const limit = 20;
 
   try {
-    const comments = await prisma.comment.findMany({
+    const comments = await prismaRead.comment.findMany({
       where: { chapterId },
       include: {
         user: { select: { id: true, name: true } }

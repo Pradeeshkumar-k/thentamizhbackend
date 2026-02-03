@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client"
 
+// Direct connection (Bypass PgBouncer)
 export const prismaWrite = new PrismaClient({
   datasources: {
     db: {
@@ -7,3 +8,4 @@ export const prismaWrite = new PrismaClient({
     }
   }
 })
+export default prismaWrite;

@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
-import prisma from '../utils/prisma';
+import { prismaRead } from '../utils/prismaRead';
+import { prismaWrite } from '../utils/prismaWrite';
 
 // Like a Novel
 export const likeNovel = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -19,7 +20,7 @@ export const likeNovel = async (req: AuthRequest, res: Response): Promise<void> 
     }
 
     // Check if already liked
-    const existingLike = await prisma.novelLike.findUnique({
+    const existingLike = await prismaRead.novelLike.findUnique({
       where: {
         userId_novelId: {
           userId,
@@ -34,7 +35,7 @@ export const likeNovel = async (req: AuthRequest, res: Response): Promise<void> 
     }
 
     // Create like
-    await prisma.novelLike.create({
+    await prismaWrite.novelLike.create({
       data: {
         userId,
         novelId
@@ -64,7 +65,7 @@ export const unlikeNovel = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    await prisma.novelLike.deleteMany({
+    await prismaWrite.novelLike.deleteMany({
       where: {
         userId,
         novelId
@@ -95,7 +96,7 @@ export const bookmarkNovel = async (req: AuthRequest, res: Response): Promise<vo
     }
 
     // Check if already bookmarked
-    const existingBookmark = await prisma.bookmark.findUnique({
+    const existingBookmark = await prismaRead.bookmark.findUnique({
       where: {
         userId_novelId: {
           userId,
@@ -110,7 +111,7 @@ export const bookmarkNovel = async (req: AuthRequest, res: Response): Promise<vo
     }
 
     // Create bookmark
-    await prisma.bookmark.create({
+    await prismaWrite.bookmark.create({
       data: {
         userId,
         novelId
@@ -143,7 +144,7 @@ export const removeBookmark = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    await prisma.bookmark.deleteMany({
+    await prismaWrite.bookmark.deleteMany({
       where: {
         userId,
         novelId
@@ -167,7 +168,7 @@ export const getBookmarkedNovels = async (req: AuthRequest, res: Response): Prom
       return;
     }
 
-    const bookmarks = await prisma.bookmark.findMany({
+    const bookmarks = await prismaRead.bookmark.findMany({
       where: { userId },
       include: {
         novel: {

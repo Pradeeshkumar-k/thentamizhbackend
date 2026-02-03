@@ -1,5 +1,5 @@
 import redis from '../utils/redis';
-import prisma from '../utils/prisma';
+import { prismaWrite } from '../utils/prismaWrite';
 
 /**
  * Synchronizes view counts from Redis to the database.
@@ -32,8 +32,8 @@ export const syncViewsToDb = async () => {
       if (!count || count <= 0) continue;
 
       try {
-        // 2. Atomic increment in DB
-        await prisma.novel.update({
+        // 2. Atomic increment in DB (Direct Write)
+        await prismaWrite.novel.update({
           where: { id: novelId },
           data: { views: { increment: count } },
         });
@@ -59,7 +59,7 @@ export const syncViewsToDb = async () => {
       if (!count || count <= 0) continue;
 
       try {
-        await prisma.chapter.update({
+        await prismaWrite.chapter.update({
           where: { id: chapterId },
           data: { views: { increment: count } },
         });
