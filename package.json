@@ -19,6 +19,7 @@
     "@prisma/adapter-pg": "^7.3.0",
     "@prisma/client": "6.2.1",
     "@types/compression": "^1.8.1",
+    "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
