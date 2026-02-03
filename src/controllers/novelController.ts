@@ -139,7 +139,7 @@ export const getNovelById = async (req: Request, res: Response) => {
     }
 
     // 🚀 Get real-time total (From DB + Redis)
-    const redisCount = await getRedisViewCount('novel', id);
+    const redisCount = Number(await getRedisViewCount('novel', id)) || 0;
     const totalViews = (novel.views || 0) + redisCount;
 
     if (!novel.titleEn || !novel.descriptionEn) {
@@ -358,6 +358,7 @@ export const incrementNovelView = async (req: Request, res: Response) => {
       
       // Increment counter
       await incrementViewCount('novel', id);
+      console.log('[VIEW]', 'novel', id);
     }
 
     return res.status(204).end();
