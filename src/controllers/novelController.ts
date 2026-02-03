@@ -149,7 +149,12 @@ export const getNovelById = async (req: Request, res: Response) => {
     }
 
     // 🚀 Get real-time total (From DB + Redis)
-    const redisCount = Number(await getRedisViewCount('novel', id)) || 0;
+    let redisCount = 0;
+    try {
+      redisCount = Number(await getRedisViewCount('novel', id)) || 0;
+    } catch (err) {
+      console.error('[GET NOVEL] Redis fetch failed (Non-critical):', err);
+    }
     const totalViews = (novel.views || 0) + redisCount;
 
     if (!novel.titleEn || !novel.descriptionEn) {
@@ -321,7 +326,12 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
     });
 
     const chapterIds = chapters.map(c => c.id);
-    const redisIncrements = await getRedisViewCounts('chapter', chapterIds);
+    let redisIncrements: Record<string, number> = {};
+    try {
+      redisIncrements = await getRedisViewCounts('chapter', chapterIds);
+    } catch (err) {
+      console.error('[GET CHAPTERS] Redis batch fetch failed (Non-critical):', err);
+    }
 
     const formattedChapters = chapters.map((ch: any) => ({
       _id: ch.id,

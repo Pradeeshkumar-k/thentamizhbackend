@@ -28,7 +28,12 @@ export const getChapterById = async (req: Request, res: Response) => {
     }
 
     // 🚀 Get real-time Redis increment buffer (READ ONLY)
-    const redisCount = Number(await getRedisViewCount('chapter', chapterId)) || 0;
+    let redisCount = 0;
+    try {
+      redisCount = Number(await getRedisViewCount('chapter', chapterId)) || 0;
+    } catch (err) {
+      console.error('[GET CHAPTER] Redis fetch failed (Non-critical):', err);
+    }
 
     const chapter = await prismaRead.chapter.findUnique({
       where: { id: chapterId },
