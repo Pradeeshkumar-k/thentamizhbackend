@@ -203,7 +203,6 @@ export const unlikeChapter = async (req: AuthRequest, res: Response) => {
 // Public: Increment view count for chapter (REAL-TIME FIX)
 export const incrementChapterView = async (req: Request, res: Response) => {
   const chapterId = String(req.params.id);
-  console.log('[HIT] incrementChapterView', chapterId);
 
   const ip =
     (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
@@ -245,7 +244,6 @@ export const incrementChapterView = async (req: Request, res: Response) => {
       } else {
         // 2️⃣ Redis increment (REAL-TIME)
         await incrementViewCount('chapter', chapterId);
-        console.log('[VIEW]', 'chapter', chapterId);
       }
 
       // 3️⃣ Fire-and-forget history log
