@@ -48,7 +48,7 @@ model Novel {
   @@index([createdAt])
   @@index([status])
   @@index([authorId])
-  @@index([status, deletedAt, createdAt(sort: Desc)], map: "idx_novel_public")
+  @@index([status, deletedAt, createdAt])
 }
 
 model Chapter {

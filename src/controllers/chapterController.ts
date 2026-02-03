@@ -47,7 +47,7 @@ export const getChapterById = async (req: Request, res: Response) => {
       await prisma.chapterView.create({
         data: { chapterId, userId, ip },
       });
-      // Optimized view count (Redis REST)
+      // Increment via Redis (Sync worker will update DB later)
       await incrementViewCount('chapter', chapterId);
     }
 

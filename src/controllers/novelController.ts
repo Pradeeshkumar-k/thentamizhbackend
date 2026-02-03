@@ -15,14 +15,24 @@ export const getNovels = async (req: Request, res: Response) => {
   try {
     const limit = 20;
     const cursor = req.query.cursor as string | undefined;
+    const search = req.query.search?.toString();
+
+    const where: any = {
+      status: 'PUBLISHED',
+      // @ts-ignore
+      deletedAt: null,
+    };
+
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } }
+      ];
+    }
 
     const novels = await prisma.novel.findMany({
       take: limit,
       ...(cursor && { cursor: { id: cursor }, skip: 1 }),
-      where: {
-        status: 'PUBLISHED',
-        deletedAt: null,
-      },
+      where,
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,

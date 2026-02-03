@@ -32,11 +32,19 @@ export const register = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-export const login = async (req: Request, res: Response): Promise<void> => {
-  const { email, username, password } = req.body;
-  const loginIdentifier = email || username;
-
+export const login = async (req: Request, res: Response) => {
   try {
+    const { email, username, password } = req.body;
+    const loginIdentifier = email || username;
+
+    // ✅ Validate input
+    if (!loginIdentifier || !password) {
+      return res.status(400).json({
+        message: 'Email/Username and password are required',
+      });
+    }
+
+    // ✅ Find user
     const user = await prisma.user.findFirst({
       where: {
         OR: [
@@ -47,20 +55,36 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     });
 
     if (!user) {
-      res.status(400).json({ message: 'Invalid credentials' });
-      return;
+      return res.status(401).json({
+        message: 'Invalid email/username or password',
+      });
     }
 
+    // ✅ Compare password
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
-      res.status(400).json({ message: 'Invalid credentials' });
-      return;
+      return res.status(401).json({
+        message: 'Invalid email/username or password',
+      });
     }
 
+    // ✅ Create tokens
     const tokens = generateTokens(user.id, user.role);
-    res.json({ user, ...tokens });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error: (error as any).message });
+
+    // ✅ Send clean response (compatible with frontend authService)
+    res.json({
+      ...tokens, // accessToken, refreshToken
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        username: user.username
+      },
+    });
+  } catch (err) {
+    console.error('[LOGIN ERROR]', err);
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
