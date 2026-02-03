@@ -53,8 +53,10 @@ export const getNovels = async (req: Request, res: Response) => {
         titleEn: true,
         coverImageUrl: true,
         views: true,
+        status: true,
         createdAt: true,
         author: { select: { name: true } },
+        _count: { select: { chapters: true, likes: true } }
       },
     });
 
@@ -70,6 +72,9 @@ export const getNovels = async (req: Request, res: Response) => {
       views: (n.views || 0) + (redisIncrements[n.id] || 0),
       createdAt: n.createdAt,
       authorName: n.author?.name ?? 'Unknown',
+      totalChapters: n._count?.chapters || 0,
+      likeCount: n._count?.likes || 0,
+      status: n.status
     }));
 
     res.setHeader(
@@ -122,7 +127,7 @@ export const getNovelById = async (req: Request, res: Response) => {
           orderBy: { order: 'asc' },
           select: { id: true, title: true, titleEn: true, order: true, views: true }
         },
-        _count: { select: { likes: true, bookmarks: true } },
+        _count: { select: { chapters: true, likes: true, bookmarks: true } },
         // Check if user has liked/bookmarked
         likes: userId ? { where: { userId }, select: { id: true } } : false,
         bookmarks: userId ? { where: { userId }, select: { id: true } } : false,
@@ -156,6 +161,7 @@ export const getNovelById = async (req: Request, res: Response) => {
       author: (novel as any).author?.name || 'Unknown', 
       authorName: (novel as any).author?.name || 'Unknown',
       views: totalViews,
+      totalChapters: (novel as any)._count?.chapters || 0,
       isLiked: userId ? (novel.likes as any[]).length > 0 : false,
       isBookmarked: userId ? (novel.bookmarks as any[]).length > 0 : false,
       likes: undefined, // Clear nested relations

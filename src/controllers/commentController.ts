@@ -20,7 +20,7 @@ export const addComment = async (req: AuthRequest, res: Response): Promise<void>
         userId,
       },
       include: {
-        user: { select: { email: true } }
+        user: { select: { id: true, name: true } }
       }
     });
     res.status(201).json(comment);
