@@ -25,7 +25,6 @@ export const invalidateNovelCache = () => {
 };
 
 export const getNovels = async (req: Request, res: Response) => {
-  console.log('[GET NOVELS] Request received');
   try {
     const limit = 20;
     const cursor = req.query.cursor as string | undefined;
@@ -43,7 +42,6 @@ export const getNovels = async (req: Request, res: Response) => {
       ];
     }
 
-    console.log('[GET NOVELS] Querying DB...');
     const novels = await prismaRead.novel.findMany({
       take: limit,
       ...(cursor && { cursor: { id: cursor }, skip: 1 }),
@@ -61,17 +59,10 @@ export const getNovels = async (req: Request, res: Response) => {
         _count: { select: { chapters: true, likes: true, bookmarks: true } }
       },
     });
-    console.log('[GET NOVELS] DB Success, found:', novels.length);
 
-    // 🚀 NEW: Batch fetch real-time Redis increments
+    // 🚀 Batch fetch real-time Redis increments (if enabled)
     const novelIds = novels.map(n => n.id);
-    let redisIncrements: Record<string, number> = {};
-    try {
-      redisIncrements = await getRedisViewCounts('novel', novelIds);
-    } catch (redisErr) {
-      console.error('[GET NOVELS] Redis batch fetch failed (Non-critical):', redisErr);
-      // Fallback to empty -> views will show 0 (or DB if relevant)
-    }
+    const redisIncrements: Record<string, number> = redis ? await getRedisViewCounts('novel', novelIds) : {};
 
     const normalized = novels.map(n => ({
       id: n.id,
@@ -148,12 +139,7 @@ export const getNovelById = async (req: Request, res: Response) => {
     }
 
     // 🚀 Get real-time total (From DB + Redis)
-    let redisCount = 0;
-    try {
-      redisCount = Number(await getRedisViewCount('novel', id)) || 0;
-    } catch (err) {
-      console.error('[GET NOVEL] Redis fetch failed (Non-critical):', err);
-    }
+    const redisCount = redis ? Number(await getRedisViewCount('novel', id)) || 0 : 0;
     const totalViews = (novel.views || 0) + redisCount;
 
     if (!novel.titleEn || !novel.descriptionEn) {
@@ -325,12 +311,7 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
     });
 
     const chapterIds = chapters.map(c => c.id);
-    let redisIncrements: Record<string, number> = {};
-    try {
-      redisIncrements = await getRedisViewCounts('chapter', chapterIds);
-    } catch (err) {
-      console.error('[GET CHAPTERS] Redis batch fetch failed (Non-critical):', err);
-    }
+    const redisIncrements: Record<string, number> = redis ? await getRedisViewCounts('chapter', chapterIds) : {};
 
     const formattedChapters = chapters.map((ch: any) => ({
       _id: ch.id,
