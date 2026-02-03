@@ -5,7 +5,7 @@ import { prismaWrite } from '../utils/prismaWrite';
 import { TranslationService } from '../services/translationService';
 import { addTranslationJob } from '../utils/queue';
 import { decodeAccessToken } from '../utils/jwt';
-import { getRedisViewCount } from '../utils/redis';
+import { getRedisViewCount, incrementViewCount } from '../utils/redis';
 
 // Public: Get chapter content
 // 🚀 FAST & SAFE
@@ -26,6 +26,48 @@ export const getChapterById = async (req: Request, res: Response) => {
         userId = payload?.userId || payload?.id || null;
       } catch {}
     }
+
+    // REAL IP (Vercel-safe)
+    const ip =
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      req.socket.remoteAddress ||
+      'unknown';
+
+    // Count only once per 10 seconds (TESTING)
+    const TIME_WINDOW = new Date(Date.now() - 10 * 1000); 
+
+    const whereCondition = {
+      chapterId: chapterId,
+      OR: [
+        userId ? { userId } : undefined,
+        { ip },
+      ].filter(Boolean) as any,
+      viewedAt: { gte: TIME_WINDOW },
+    };
+
+    // @ts-ignore - Handle chapterView safely
+    const alreadyViewed = await prismaRead.chapterView.findFirst({
+      where: whereCondition,
+    });
+
+    if (!alreadyViewed) {
+      // Persistent view recording with ATOMIC INCREMENT
+      await prismaWrite.$transaction([
+        prismaWrite.chapterView.create({
+          data: { chapterId, userId, ip },
+        }),
+        prismaWrite.chapter.update({
+          where: { id: chapterId },
+          data: { views: { increment: 1 } }
+        })
+      ]).then(() => console.log(`[VIEW] New atomic view recorded for ${chapterId} (IP: ${ip})`))
+        .catch(err => console.error("chapterView transaction error:", err));
+        
+      // Also increment Redis just in case frontend relies on it for something else, 
+      // but DB is now the source of truth.
+      incrementViewCount('chapter', chapterId);
+    }
+
 
     // 🚀 Get real-time Redis increment buffer
     const redisCount = await getRedisViewCount('chapter', chapterId);
@@ -222,26 +264,38 @@ export const incrementChapterView = async (req: Request, res: Response) => {
       } catch {}
     }
 
-    // FIX STEP 5: ATOMIC TRANSACTION ON DIRECT URL
-    await prismaWrite.$transaction([
+    // Count only once per 24 hours
+    const TWENTY_FOUR_HOURS = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const whereCondition = {
+      chapterId: id,
+      OR: [
+        userId ? { userId } : undefined,
+        { ip },
+      ].filter(Boolean) as any,
+      viewedAt: { gte: TWENTY_FOUR_HOURS },
+    };
+
+    // @ts-ignore - Check if already viewed
+    const alreadyViewed = await prismaRead.chapterView.findFirst({
+      where: whereCondition,
+    });
+
+    if (!alreadyViewed) {
+      // 1. Log to history (Fire & Forget to avoid blocking)
       prismaWrite.chapterView.create({
-        data: {
-          chapterId: id,
-          userId: userId,
-          ip: ip
-        }
-      }),
-      prismaWrite.chapter.update({
-        where: { id },
-        data: {
-          views: { increment: 1 }
-        }
-      })
-    ]);
+        data: { chapterId: id, userId, ip }
+      }).catch(err => console.error("ChapterView logging error:", err));
+
+      // 2. Increment REDIS counter (Fast & Real-time)
+      // This key is read by getChapterById to show instant updates
+      await incrementViewCount('chapter', id);
+    }
 
     return res.status(204).end(); 
   } catch (error) {
     console.error("INCREMENT CHAPTER VIEW ERROR:", error);
-    res.status(500).json({ message: "Error incrementing view" });
+    // Return success anyway to not break client
+    res.status(204).end();
   }
 };

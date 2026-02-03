@@ -3,7 +3,7 @@ import { AuthRequest } from '../middlewares/authMiddleware';
 import { prismaRead } from '../utils/prismaRead';
 import { prismaWrite } from '../utils/prismaWrite';
 import { TranslationService } from '../services/translationService';
-import { getRedisViewCount, getRedisViewCounts } from '../utils/redis';
+import redis, { getRedisViewCount, getRedisViewCounts, incrementViewCount } from '../utils/redis';
 import { addTranslationJob } from '../utils/queue';
 import { decodeAccessToken } from '../utils/jwt';
 
@@ -137,9 +137,6 @@ export const getNovelById = async (req: Request, res: Response) => {
     if (!novel) {
       return res.status(404).json({ message: "Not found" });
     }
-
-    // 🚫 No CDN cache for views
-    res.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
 
     // 🚀 Get real-time total (From DB + Redis)
     const redisCount = await getRedisViewCount('novel', id);
@@ -341,18 +338,32 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
 };
 
 // Public: Increment view count for novel (REAL-TIME FIX)
+// Public: Increment view count for novel (REAL-TIME FIX)
 export const incrementNovelView = async (req: Request, res: Response) => {
   const id = String(req.params.id);
+  
+  const ip =
+    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+    req.socket.remoteAddress ||
+    'unknown';
+
   try {
-    await prismaWrite.novel.update({
-      where: { id },
-      data: {
-        views: { increment: 1 }
-      }
-    });
+    // Deduplicate using Redis (24 hours) since NovelView model doesn't exist yet
+    const dedupKey = `viewed:novel:${id}:${ip}`;
+    const alreadyViewed = await redis.get(dedupKey);
+
+    if (!alreadyViewed) {
+      // Set key with 24h expiry (86400 seconds)
+      await redis.setex(dedupKey, 86400, '1');
+      
+      // Increment counter
+      await incrementViewCount('novel', id);
+    }
+
     return res.status(204).end();
   } catch (error) {
     console.error("INCREMENT NOVEL VIEW ERROR:", error);
-    res.status(500).json({ message: "Error incrementing view" });
+    // Don't fail the request
+    res.status(204).end();
   }
 };
