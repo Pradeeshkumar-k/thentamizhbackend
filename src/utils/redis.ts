@@ -9,15 +9,17 @@ export const redis = new Redis({
 });
 
 /**
- * Increment view count for a target
+ * Increment view count for a target and return the new value
  */
-export const incrementViewCount = async (type: 'novel' | 'chapter', id: string) => {
+export const incrementViewCount = async (type: 'novel' | 'chapter', id: string): Promise<number> => {
   try {
-    await redis.incr(`${type}:views:${id}`);
-    return true;
+    const key = `${type}:views:${id}`;
+    const newVal = await redis.incr(key);
+    console.log(`[REDIS INCR] ${key} => ${newVal}`);
+    return Number(newVal);
   } catch (err) {
     console.error('[REDIS ERROR]', err);
-    return false;
+    return 0;
   }
 };
 
@@ -26,7 +28,9 @@ export const incrementViewCount = async (type: 'novel' | 'chapter', id: string) 
  */
 export const getRedisViewCount = async (type: 'novel' | 'chapter', id: string): Promise<number> => {
   try {
-    const val = await redis.get(`${type}:views:${id}`);
+    const key = `${type}:views:${id}`;
+    const val = await redis.get(key);
+    console.log(`[REDIS GET] ${key} => ${val}`);
     return val ? Number(val) : 0;
   } catch (err) {
     console.error('[REDIS GET ERROR]', err);
@@ -40,15 +44,18 @@ export const getRedisViewCount = async (type: 'novel' | 'chapter', id: string): 
 export const getRedisViewCounts = async (type: 'novel' | 'chapter', ids: string[]): Promise<Record<string, number>> => {
   if (!ids.length) return {};
   try {
-    const keys = ids.map(id => `${type}:views:${id}`);
-    const vals = await redis.mget(...keys);
+    const p = redis.pipeline();
+    ids.forEach(id => p.get(`${type}:views:${id}`));
+    const vals = await p.exec();
+    
     const results: Record<string, number> = {};
     ids.forEach((id, index) => {
-      results[id] = vals[index] ? Number(vals[index]) : 0;
+      const val = vals[index];
+      results[id] = val !== null && val !== undefined ? Number(val) : 0;
     });
     return results;
   } catch (err) {
-    console.error('[REDIS MGET ERROR]', err);
+    console.error('[REDIS PIPELINE ERROR]', err);
     return {};
   }
 };

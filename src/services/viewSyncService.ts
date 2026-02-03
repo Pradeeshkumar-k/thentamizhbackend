@@ -27,23 +27,24 @@ export const syncViewsToDb = async () => {
       const novelId = key.split(':')[2];
       if (!novelId) continue;
 
-      // Get current count
-      const count = await redis.get<number>(key);
+      // 1. Get current count and atomicly reset in Redis (GETSET is safe)
+      const count = await redis.getset<number>(key, 0);
       if (!count || count <= 0) continue;
 
       try {
-        // Atomic increment in DB
+        // 2. Atomic increment in DB
         await prisma.novel.update({
           where: { id: novelId },
           data: { views: { increment: count } },
         });
 
-        // Atomic delete in Redis after successful DB update
-        await redis.del(key);
         console.log(`[ViewSync] Novel ${novelId} synced with +${count} views`);
+        // Note: We don't delete the key here because it was already reset/decremented by getset.
+        // If there were increments during this block, they are already at 0 + new_incs.
       } catch (dbErr) {
         console.error(`[ViewSync] Novel DB error for ${novelId}:`, dbErr);
-        // Do NOT delete key; it will be retried in the next sync run
+        // 3. Rollback in Redis if DB fails (RE-INCREMENT)
+        await redis.incrby(key, count);
       }
     }
 
@@ -54,7 +55,7 @@ export const syncViewsToDb = async () => {
       const chapterId = key.split(':')[2];
       if (!chapterId) continue;
 
-      const count = await redis.get<number>(key);
+      const count = await redis.getset<number>(key, 0);
       if (!count || count <= 0) continue;
 
       try {
@@ -63,11 +64,10 @@ export const syncViewsToDb = async () => {
           data: { views: { increment: count } },
         });
 
-        await redis.del(key);
         console.log(`[ViewSync] Chapter ${chapterId} synced with +${count} views`);
       } catch (dbErr) {
         console.error(`[ViewSync] Chapter DB error for ${chapterId}:`, dbErr);
-        // Do NOT delete key; it will be retried in the next sync run
+        await redis.incrby(key, count);
       }
     }
 

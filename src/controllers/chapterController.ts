@@ -33,33 +33,12 @@ export const getChapterById = async (req: Request, res: Response) => {
       } catch {}
     }
 
-    // Count only once per 24 hours
-    const TWENTY_FOUR_HOURS = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-    const whereCondition = {
-      chapterId,
-      OR: [
-        userId ? { userId } : undefined,
-        { ip },
-      ].filter(Boolean) as any,
-      viewedAt: { gte: TWENTY_FOUR_HOURS },
-    };
-
-    // @ts-ignore
-    const alreadyViewed = await prisma.chapterView.findFirst({
-      where: whereCondition,
+    // console.log(`[VIEW INCR] Chapter ${chapterId} for ${ip}`);
+    await prisma.chapterView.create({
+      data: { chapterId, userId, ip },
     });
-
-    if (!alreadyViewed) {
-      await prisma.chapterView.create({
-        data: { chapterId, userId, ip },
-      });
-      // Increment via Redis (Sync worker will update DB later)
-      await incrementViewCount('chapter', chapterId);
-    }
-
-    // 🚀 Get real-time Redis increment
-    const redisCount = await getRedisViewCount('chapter', chapterId);
+    // Atomic Increment + Get
+    const redisCount = await incrementViewCount('chapter', chapterId);
 
     const chapter = await prisma.chapter.findUnique({
       where: { id: chapterId },

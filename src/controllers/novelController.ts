@@ -79,7 +79,7 @@ export const getNovels = async (req: Request, res: Response) => {
 
     res.setHeader(
       'Cache-Control',
-      'public, s-maxage=60, stale-while-revalidate=300'
+      'private, no-store, max-age=0, must-revalidate'
     );
 
     // 🔥 Controlled translation trigger (Queue/Fire-and-forget)
@@ -138,16 +138,11 @@ export const getNovelById = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Not found" });
     }
 
-    res.setHeader(
-      "Cache-Control",
-      "public, s-maxage=60, stale-while-revalidate=300"
-    );
+    // 🚫 No CDN cache for views
+    res.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
 
-    // 🔥 Optimized view increment (Redis REST)
-    await incrementViewCount('novel', id);
-    
-    // 🚀 Get real-time total
-    const redisCount = await getRedisViewCount('novel', id);
+    // 🔥 Optimized view increment (Redis REST) - Atomic Increment + Get
+    const redisCount = await incrementViewCount('novel', id);
     const totalViews = (novel.views || 0) + redisCount;
 
     if (!novel.titleEn || !novel.descriptionEn) {
@@ -329,13 +324,10 @@ export const deleteNovel = async (req: Request, res: Response) => {
 // Public: Get chapters for a novel
 export const getChaptersByNovel = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Add Cache-Control for Vercel Edge Caching
-    res.setHeader(
-      "Cache-Control",
-      "public, s-maxage=60, stale-while-revalidate=300"
-    );
+    // 🚫 No CDN cache for views
+    res.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
 
-    const id = String(req.params.id); // Expecting novelId as :id for consistency with other public routes or :novelId
+    const id = String(req.params.id);
 
     const chapters = await prisma.chapter.findMany({
       where: { novelId: id },
@@ -343,15 +335,18 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
       select: {
         id: true,
         title: true,
-        titleEn: true, // Include English Title
+        titleEn: true,
         order: true,
         views: true,
-        thumbnailUrl: true, // Included
+        thumbnailUrl: true,
         createdAt: true,
         updatedAt: true
-        // Exclude content for list view
       }
     });
+
+    // 🚀 NEW: Batch fetch real-time Redis increments for all chapters
+    const chapterIds = chapters.map(c => c.id);
+    const redisIncrements = await getRedisViewCounts('chapter', chapterIds);
 
     // Map to frontend expected format
     const formattedChapters = chapters.map((ch: any) => ({
@@ -359,11 +354,11 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
       id: ch.id,
       novelId: id,
       title: ch.title,
-      titleEn: (ch as any).titleEn, // Include English Title
+      titleEn: (ch as any).titleEn,
       chapterNumber: ch.order,
       order: ch.order,
-      views: ch.views,
-      thumbnail: ch.thumbnailUrl, // Included
+      views: (ch.views || 0) + (redisIncrements[ch.id] || 0),
+      thumbnail: ch.thumbnailUrl,
       createdAt: ch.createdAt,
       updatedAt: ch.updatedAt
     }));
