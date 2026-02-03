@@ -25,11 +25,8 @@ export const invalidateNovelCache = () => {
 };
 
 export const getNovels = async (req: Request, res: Response) => {
-  console.log('[GET NOVELS] start');
+  console.log('[GET NOVELS] Request received');
   try {
-    // DEBUG: Connectivity check
-    await prismaRead.novel.findMany({ take: 1 });
-    console.log('[GET NOVELS] success');
     const limit = 20;
     const cursor = req.query.cursor as string | undefined;
     const search = req.query.search?.toString();
@@ -46,6 +43,7 @@ export const getNovels = async (req: Request, res: Response) => {
       ];
     }
 
+    console.log('[GET NOVELS] Querying DB...');
     const novels = await prismaRead.novel.findMany({
       take: limit,
       ...(cursor && { cursor: { id: cursor }, skip: 1 }),
@@ -63,6 +61,7 @@ export const getNovels = async (req: Request, res: Response) => {
         _count: { select: { chapters: true, likes: true, bookmarks: true } }
       },
     });
+    console.log('[GET NOVELS] DB Success, found:', novels.length);
 
     // 🚀 NEW: Batch fetch real-time Redis increments
     const novelIds = novels.map(n => n.id);
