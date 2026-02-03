@@ -11,6 +11,7 @@ import chapterRoutes from './routes/chapterRoutes';
 import commentRoutes from './routes/commentRoutes';
 import readingRoutes from './routes/readingRoutes';
 import adminRoutes from './routes/adminRoutes';
+import cronRoutes from './routes/cronRoutes';
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use('/api/chapters', chapterRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/reading', readingRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/cron', cronRoutes);
 
 app.get('/api/health', checkHealth); 
 

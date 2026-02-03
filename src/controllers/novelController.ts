@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import prisma from '../utils/prisma';
 import { TranslationService } from '../services/translationService';
+import { incrementViewCount } from '../utils/redis';
+import { addTranslationJob } from '../utils/queue';
 
 
 // Cache Invalidation (No-op as in-memory cache is removed)
@@ -9,68 +11,59 @@ export const invalidateNovelCache = () => {
     // console.log('[Cache] Invalidation called (Cache Disabled)');
 };
 
-// Public: Get all novels (Optimized)
 export const getNovels = async (req: Request, res: Response) => {
   try {
-    const page = Math.max(Number(req.query.page || 0), 0);
     const limit = 20;
-    const search = req.query.search?.toString();
-
-    const where: any = {
-      status: 'PUBLISHED',
-      // @ts-ignore
-      deletedAt: null
-    };
-
-    if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } }
-      ];
-    }
+    const cursor = req.query.cursor as string | undefined;
 
     const novels = await prisma.novel.findMany({
-      where,
       take: limit,
-      skip: page * limit,
+      ...(cursor && { cursor: { id: cursor }, skip: 1 }),
+      where: {
+        status: 'PUBLISHED',
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
       select: {
         id: true,
         title: true,
         titleEn: true,
         coverImageUrl: true,
+        views: true,
         createdAt: true,
-        status: true, // Added for verify
-        author: { select: { name: true } }
+        author: { select: { name: true } },
       },
-      orderBy: { createdAt: 'desc' }
     });
+
+    const normalized = novels.map(n => ({
+      id: n.id,
+      title: n.title,
+      titleEn: n.titleEn,
+      coverImage: n.coverImageUrl,
+      views: n.views,
+      createdAt: n.createdAt,
+      authorName: n.author?.name ?? 'Unknown',
+    }));
 
     res.setHeader(
       'Cache-Control',
       'public, s-maxage=60, stale-while-revalidate=300'
     );
 
-    // Normalize Data (Backend-side)
-    const normalizedNovels = novels.map((n: any) => ({
-      ...n,
-      coverImage: n.coverImageUrl,
-      author: n.author?.name || 'Unknown' // Flatten author object
-    }));
-
-    // 🔥 Pre-translation trigger (fire-and-forget)
+    // 🔥 Controlled translation trigger (Queue/Fire-and-forget)
     novels.forEach(n => {
       if (!n.titleEn) {
-        TranslationService.translateAndSaveNovel(n.id);
+        addTranslationJob('novel', n.id);
       }
     });
 
     res.json({
-      novels: normalizedNovels,
-      page,
-      limit,
-      hasMore: novels.length === limit
+      novels: normalized,
+      nextCursor: novels.length ? novels[novels.length - 1].id : null,
+      hasMore: novels.length === limit,
     });
   } catch (err) {
-    console.error('[GET NOVELS ERROR]', err);
+    console.error('[GET NOVELS]', err);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -100,7 +93,7 @@ export const getNovelById = async (req: Request, res: Response) => {
         author: { select: { name: true } },
         chapters: {
           orderBy: { order: 'asc' },
-          select: { id: true, title: true, titleEn: true, order: true }
+          select: { id: true, title: true, titleEn: true, order: true, views: true }
         },
         _count: { select: { likes: true, bookmarks: true } }
       }
@@ -115,21 +108,19 @@ export const getNovelById = async (req: Request, res: Response) => {
       "public, s-maxage=60, stale-while-revalidate=300"
     );
 
-    // 🔥 Fire-and-forget view increment & pre-translation
-    prisma.novel.update({
-      where: { id },
-      data: { views: { increment: 1 } }
-    }).catch(() => {});
+    // 🔥 Optimized view increment (Redis REST)
+    await incrementViewCount('novel', id);
 
     if (!novel.titleEn || !novel.descriptionEn) {
-      TranslationService.translateAndSaveNovel(id);
+      addTranslationJob('novel', id);
     }
 
     // Normalize Data (Backend-side)
     const normalizedNovel = {
       ...novel,
        coverImage: (novel as any).coverImageUrl,
-       author: (novel as any).author?.name || 'Unknown' // Flatten author object
+       author: (novel as any).author?.name || 'Unknown', // Keep for compatibility
+       authorName: (novel as any).author?.name || 'Unknown' // Normalized field
     };
 
     res.json(normalizedNovel);
@@ -265,40 +256,22 @@ export const deleteNovel = async (req: Request, res: Response) => {
     // Respond early to prevent timeouts
     res.status(202).json({ message: 'Deletion processing in background' });
 
-    // Run deletion async (fire-and-forget)
+    // Run soft deletion async (fire-and-forget)
     setImmediate(async () => {
         try {
-            await prisma.$transaction(async (tx) => {
-                // 1. Delete Novel Dependencies
-                await tx.readingProgress.deleteMany({ where: { novelId: id } });
-                await tx.bookmark.deleteMany({ where: { novelId: id } });
-                await tx.novelLike.deleteMany({ where: { novelId: id } });
-
-                // 2. Find Chapters to delete their dependencies
-                const chapters = await tx.chapter.findMany({ 
-                    where: { novelId: id },
-                    select: { id: true }
-                });
-                const chapterIds = chapters.map(c => c.id);
-
-                if (chapterIds.length > 0) {
-                    // 3. Delete Chapter Dependencies
-                    await tx.comment.deleteMany({ where: { chapterId: { in: chapterIds } } });
-                    await tx.like.deleteMany({ where: { chapterId: { in: chapterIds } } });
-                    await tx.readingProgress.deleteMany({ where: { chapterId: { in: chapterIds } } });
-                    
-                    // 4. Delete Chapters
-                    await tx.chapter.deleteMany({ where: { novelId: id } });
+            await prisma.novel.update({
+                where: { id },
+                data: { 
+                    status: 'DELETED',
+                    // @ts-ignore
+                    deletedAt: new Date() 
                 }
-
-                // 5. Finally Delete Novel
-                await tx.novel.delete({ where: { id } });
             });
 
             invalidateNovelCache();
-            console.log(`[DELETE] Novel ${id} removed successfully`);
+            console.log(`[SOFT DELETE] Novel ${id} marked as deleted`);
         } catch (err) {
-            console.error("[DELETE FAILED]", err);
+            console.error("[SOFT DELETE FAILED]", err);
         }
     });
 

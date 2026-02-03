@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import prisma from '../utils/prisma';
 import { TranslationService } from '../services/translationService';
+import { incrementViewCount } from '../utils/redis';
+import { addTranslationJob } from '../utils/queue';
 
 // Public: Get chapter content
 // 🚀 FAST & SAFE
@@ -42,16 +44,11 @@ export const getChapterById = async (req: Request, res: Response) => {
     });
 
     if (!alreadyViewed) {
-      await prisma.$transaction([
-        // @ts-ignore
-        prisma.chapterView.create({
-          data: { chapterId, userId, ip },
-        }),
-        prisma.chapter.update({
-          where: { id: chapterId },
-          data: { views: { increment: 1 } },
-        }),
-      ]);
+      await prisma.chapterView.create({
+        data: { chapterId, userId, ip },
+      });
+      // Optimized view count (Redis REST)
+      await incrementViewCount('chapter', chapterId);
     }
 
     const chapter = await prisma.chapter.findUnique({
@@ -78,7 +75,8 @@ export const getChapterById = async (req: Request, res: Response) => {
           select: { likes: true }
         },
         // @ts-ignore
-        isTranslating: true
+        isTranslating: true,
+        views: true
       }
     });
 
