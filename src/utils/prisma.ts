@@ -4,9 +4,8 @@ const globalForPrisma = global as unknown as {
   prisma?: PrismaClient;
 };
 
-const url = process.env.DATABASE_URL;
-console.log('[PRISMA INIT] DATABASE_URL defined:', !!url);
-console.log('[PRISMA INIT] NODE_ENV:', process.env.NODE_ENV);
+const url = 'postgres://postgres:Welcome9952509985@db.aegbvcoffyzrsnxjunxz.supabase.co:5432/postgres?sslmode=require';
+console.log('[PRISMA INIT] Using HARDCODED direct URL');
 
 export const prisma =
   globalForPrisma.prisma ??
