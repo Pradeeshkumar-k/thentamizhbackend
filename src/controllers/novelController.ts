@@ -93,12 +93,9 @@ export const getNovels = async (req: Request, res: Response) => {
   } catch (err) {
     console.error('[GET NOVELS ERROR]', err);
     console.error('[GET NOVELS STACK]', (err as Error).stack);
-    console.error('[ENV CHECK] DIRECT_URL exists:', !!process.env.DIRECT_URL);
     res.status(500).json({ 
       message: 'Server error',
-      error: String(err),
-      details: (err as any).meta ? (err as any).meta : 'No meta',
-      code: (err as any).code ? (err as any).code : 'No code'
+      error: String(err)
     });
   }
 };
