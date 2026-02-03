@@ -368,17 +368,19 @@ export const incrementNovelView = async (req: Request, res: Response) => {
     'unknown';
 
   try {
-    // Deduplicate using Redis (24 hours) since NovelView model doesn't exist yet
-    const dedupKey = `viewed:novel:${id}:${ip}`;
-    const alreadyViewed = await redis.get(dedupKey);
+    // Deduplicate using Redis (24 hours)
+    if (redis) {
+      const dedupKey = `viewed:novel:${id}:${ip}`;
+      const alreadyViewed = await redis.get(dedupKey);
 
-    if (!alreadyViewed) {
-      // Set key with 24h expiry (86400 seconds)
-      await redis.setex(dedupKey, 86400, '1');
-      
-      // Increment counter
-      await incrementViewCount('novel', id);
-      console.log('[VIEW]', 'novel', id);
+      if (!alreadyViewed) {
+        // Set key with 24h expiry (86400 seconds)
+        await redis.setex(dedupKey, 86400, '1');
+        
+        // Increment counter
+        await incrementViewCount('novel', id);
+        console.log('[VIEW]', 'novel', id);
+      }
     }
 
     return res.status(204).end();
