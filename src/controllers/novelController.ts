@@ -75,7 +75,7 @@ export const getNovels = async (req: Request, res: Response) => {
     const normalized = novels.map(n => {
       // ⚠️ Optimize: Prevent huge Base64 strings from crashing Vercel (Limit 4.5MB total response)
       let coverImage = n.coverImageUrl;
-      if (coverImage && coverImage.startsWith('data:') && coverImage.length > 10240) { // > 10KB
+      if (coverImage && coverImage.startsWith('data:') && coverImage.length > 153600) { // > 150KB (Approx)
           console.warn(`[Optimization] Dropping large Base64 cover for novel ${n.id} in list view`);
           coverImage = null; // Frontend will show placeholder
       }

@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { prisma } from '../utils/prisma';
 import { translateContent as performTranslation } from '../services/translationService';
-// Import Cache Invalidation
+import { ImageService } from '../services/imageService';
 import { invalidateNovelCache } from './novelController';
 
 
@@ -189,7 +189,7 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
     const finalDescription = description || novel_summary || '';
     const finalGenre = Array.isArray(categories) ? categories.join(', ') : (genre || '');
     const finalStatus = (status || 'DRAFT').toUpperCase() as any;
-    const finalCoverImageUrl = coverImageUrl || cover_image || '';
+    const finalCoverImageUrl = await ImageService.processImage(coverImageUrl || cover_image || '');
 
     const novel = await prisma.novel.create({
       data: {
@@ -225,7 +225,7 @@ export const updateNovel = async (req: AuthRequest, res: Response): Promise<void
     const finalDescription = description || novel_summary;
     const finalGenre = Array.isArray(categories) ? categories.join(', ') : genre;
     const finalStatus = status ? status.toUpperCase() : undefined;
-    const finalCoverImageUrl = coverImageUrl || cover_image;
+    const finalCoverImageUrl = await ImageService.processImage(coverImageUrl || cover_image);
 
     const data: any = {};
     if (title) data.title = title;
@@ -353,7 +353,7 @@ export const createChapter = async (req: AuthRequest, res: Response): Promise<vo
 
     // Map frontend fields (chapter_number, thumbnail, title/name)
     const finalOrder = order !== undefined ? order : (chapter_number !== undefined ? chapter_number : 1);
-    const finalThumbnailUrl = thumbnailUrl || thumbnail || '';
+    const finalThumbnailUrl = await ImageService.processImage(thumbnailUrl || thumbnail || '');
     const finalTitle = title || name || `Chapter ${finalOrder}`;
 
     // Safeguard: Prevent operations on legacy numeric IDs that crash Prisma
@@ -396,7 +396,7 @@ export const updateChapter = async (req: AuthRequest, res: Response): Promise<vo
 
     // Map frontend fields
     const finalOrder = order !== undefined ? order : (chapter_number !== undefined ? chapter_number : undefined);
-    const finalThumbnailUrl = thumbnailUrl || thumbnail;
+    const finalThumbnailUrl = await ImageService.processImage(thumbnailUrl || thumbnail);
     const finalTitle = title || name;
 
     const data: any = {};
