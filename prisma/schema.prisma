@@ -16,6 +16,7 @@ model User {
   passwordHash    String
   role            Role              @default(USER)
   createdAt       DateTime          @default(now())
+
   bookmarks       Bookmark[]
   comments        Comment[]
   likes           Like[]
@@ -23,6 +24,8 @@ model User {
   novelLikes      NovelLike[]
   readingProgress ReadingProgress[]
 }
+
+/* ===================== NOVEL ===================== */
 
 model Novel {
   id                String            @id @default(uuid())
@@ -38,62 +41,44 @@ model Novel {
   authorId          String
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
-  bookmarks         Bookmark[]
-  chapters          Chapter[]
+
   author            User              @relation(fields: [authorId], references: [id])
+  chapters          Chapter[]
+  bookmarks         Bookmark[]
   likes             NovelLike[]
   readingProgresses ReadingProgress[]
 
-  @@index([createdAt])
-  @@index([status])
   @@index([authorId])
+  @@index([createdAt])
   @@index([status, deletedAt, createdAt])
 }
 
+/* ===================== CHAPTER ===================== */
+
 model Chapter {
-  id                String            @id @default(uuid())
-  novelId           String
-  title             String
-  content           String
-  titleEn           String?
-  contentEn         String?
-  thumbnailUrl      String?
-  views             Int               @default(0)
-  order             Int
-  isTranslating     Boolean           @default(false)
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  novel             Novel             @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  id            String        @id @default(uuid())
+  novelId       String
+  title         String
+  content       String
+  titleEn       String?
+  contentEn     String?
+  thumbnailUrl  String?
+  views         Int           @default(0)
+  order         Int           // RESTORED: 'chapterOrder' -> 'order' to match controller code
+  isTranslating Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  novel             Novel        @relation(fields: [novelId], references: [id], onDelete: Cascade)
   comments          Comment[]
   likes             Like[]
   readingProgresses ReadingProgress[]
-  views_list        ChapterView[]
+  views_list        ChapterView[] // RESTORED: 'viewsList' -> 'views_list' to match existing schema style
 
   @@index([novelId, order])
-  @@index([novelId]) // Added explicit index
 }
 
-model Bookmark {
-  id        String   @id @default(uuid())
-  userId    String
-  novelId   String
-  createdAt DateTime @default(now())
-  novel     Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id])
-
-  @@unique([userId, novelId])
-}
-
-model NovelLike {
-  id        String   @id @default(uuid())
-  userId    String
-  novelId   String
-  createdAt DateTime @default(now())
-  novel     Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id])
-
-  @@unique([userId, novelId])
-}
+/* ===================== COMMENT ===================== */
 
 model Comment {
   id        String   @id @default(uuid())
@@ -101,22 +86,55 @@ model Comment {
   chapterId String
   userId    String
   createdAt DateTime @default(now())
+
   chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([chapterId]) // Added explicit index
+  @@index([chapterId, createdAt])
 }
+
+/* ===================== LIKE ===================== */
 
 model Like {
   chapterId String
   userId    String
+
   chapter   Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([chapterId, userId])
-  @@index([chapterId]) // Added explicit index
-  @@index([userId])    // Added explicit index
+  @@index([userId])
 }
+
+/* ===================== BOOKMARK ===================== */
+
+model Bookmark {
+  id        String   @id @default(uuid())
+  userId    String
+  novelId   String
+  createdAt DateTime @default(now())
+
+  novel     Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, novelId])
+}
+
+/* ===================== NOVEL LIKE ===================== */
+
+model NovelLike {
+  id        String   @id @default(uuid())
+  userId    String
+  novelId   String
+  createdAt DateTime @default(now())
+
+  novel     Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, novelId])
+}
+
+/* ===================== READING PROGRESS ===================== */
 
 model ReadingProgress {
   id        String   @id @default(uuid())
@@ -125,13 +143,15 @@ model ReadingProgress {
   chapterId String
   progress  Int      @default(0)
   lastRead  DateTime @default(now())
+
   chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   novel     Novel    @relation(fields: [novelId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, novelId])
-  @@index([userId, novelId]) // Added composite index
 }
+
+/* ===================== CHAPTER VIEW ===================== */
 
 model ChapterView {
   id        String   @id @default(uuid())
@@ -145,6 +165,8 @@ model ChapterView {
   @@index([chapterId, ip])
   @@index([chapterId, userId])
 }
+
+/* ===================== ENUMS ===================== */
 
 enum Role {
   USER
