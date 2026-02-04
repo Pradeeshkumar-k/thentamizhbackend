@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.verifyRefreshToken = exports.verifyAccessToken = exports.generateTokens = void 0;
+exports.decodeAccessToken = exports.verifyRefreshToken = exports.verifyAccessToken = exports.generateTokens = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const ACCESS_TOKEN_SECRET = process.env.JWT_SECRET || 'access_secret';
 const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || 'refresh_secret';
@@ -25,3 +25,8 @@ const verifyRefreshToken = (token) => {
     return jsonwebtoken_1.default.verify(token, REFRESH_TOKEN_SECRET);
 };
 exports.verifyRefreshToken = verifyRefreshToken;
+// Faster decode for read-only public routes (skips signature verification)
+const decodeAccessToken = (token) => {
+    return jsonwebtoken_1.default.decode(token);
+};
+exports.decodeAccessToken = decodeAccessToken;

@@ -1,22 +1,18 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-// @ts-ignore
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+exports.prisma = void 0;
 const client_1 = require("@prisma/client");
-const adapter_pg_1 = require("@prisma/adapter-pg");
-const pg_1 = require("pg");
-const connectionString = process.env.DATABASE_URL;
-console.log('[(DB-Debug] Initializing Prisma Pool. ConnectionString exists:', !!connectionString);
-if (connectionString) {
-    console.log('[DB-Debug] Connection string starts with:', connectionString.substring(0, 15) + '...');
+const globalForPrisma = global;
+const url = process.env.DATABASE_URL;
+console.log('[PRISMA INIT] DATABASE_URL defined:', !!url);
+console.log('[PRISMA INIT] NODE_ENV:', process.env.NODE_ENV);
+exports.prisma = globalForPrisma.prisma ??
+    new client_1.PrismaClient({
+        datasources: {
+            db: { url },
+        },
+        // log: ['query', 'info', 'warn', 'error'],
+    });
+if (process.env.NODE_ENV !== 'production') {
+    globalForPrisma.prisma = exports.prisma;
 }
-// Configure pool with SSL settings for Supabase
-const pool = new pg_1.Pool({
-    connectionString,
-    ssl: {
-        rejectUnauthorized: false, // Allow self-signed certificates from Supabase
-    },
-});
-const adapter = new adapter_pg_1.PrismaPg(pool);
-const prisma = new client_1.PrismaClient({ adapter });
-exports.default = prisma;

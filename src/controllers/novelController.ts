@@ -72,18 +72,27 @@ export const getNovels = async (req: Request, res: Response) => {
     });
 
 
-    const normalized = novels.map(n => ({
-      id: n.id,
-      title: n.title,
-      titleEn: n.titleEn,
-      coverImage: n.coverImageUrl,
-      views: n.views || 0,
-      createdAt: n.createdAt,
-      authorName: n.author?.name ?? 'Unknown',
-      totalChapters: n._count?.chapters || 0,
-      likeCount: n._count?.likes || 0,
-      status: n.status
-    }));
+    const normalized = novels.map(n => {
+      // ⚠️ Optimize: Prevent huge Base64 strings from crashing Vercel (Limit 4.5MB total response)
+      let coverImage = n.coverImageUrl;
+      if (coverImage && coverImage.startsWith('data:') && coverImage.length > 10240) { // > 10KB
+          console.warn(`[Optimization] Dropping large Base64 cover for novel ${n.id} in list view`);
+          coverImage = null; // Frontend will show placeholder
+      }
+
+      return {
+        id: n.id,
+        title: n.title,
+        titleEn: n.titleEn,
+        coverImage: coverImage,
+        views: n.views || 0,
+        createdAt: n.createdAt,
+        authorName: n.author?.name ?? 'Unknown',
+        totalChapters: n._count?.chapters || 0,
+        likeCount: n._count?.likes || 0,
+        status: n.status
+      };
+    });
 
     res.setHeader(
       'Cache-Control',

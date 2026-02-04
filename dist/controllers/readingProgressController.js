@@ -1,25 +1,24 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getReadingProgress = exports.updateReadingProgress = void 0;
-const prisma_1 = __importDefault(require("../utils/prisma"));
+const prisma_1 = require("../utils/prisma");
 // Update Reading Progress
 const updateReadingProgress = async (req, res) => {
     try {
-        const { novelId, chapterId, progress } = req.body;
+        const { novelId, chapterId, lastChapter, progress, isCompleted } = req.body;
         const userId = req.user?.userId;
         if (!userId) {
             res.status(401).json({ message: 'Unauthorized' });
             return;
         }
-        if (!novelId || !chapterId) {
+        // Support both chapterId and lastChapter (from frontend migration)
+        const activeChapterId = chapterId || lastChapter;
+        if (!novelId || !activeChapterId) {
             res.status(400).json({ message: 'Novel ID and Chapter ID are required' });
             return;
         }
         // Upsert progress (Create or Update)
-        const readingProgress = await prisma_1.default.readingProgress.upsert({
+        const readingProgress = await prisma_1.prisma.readingProgress.upsert({
             where: {
                 userId_novelId: {
                     userId,
@@ -27,27 +26,27 @@ const updateReadingProgress = async (req, res) => {
                 }
             },
             update: {
-                chapterId,
+                chapterId: activeChapterId,
                 progress: progress || 0,
                 lastRead: new Date()
             },
             create: {
                 userId,
                 novelId,
-                chapterId,
+                chapterId: activeChapterId,
                 progress: progress || 0,
                 lastRead: new Date()
             }
         });
-        res.json(readingProgress);
+        res.json({ success: true, data: readingProgress });
     }
     catch (error) {
         console.error('updateReadingProgress error:', error);
-        res.status(500).json({ message: 'Error updating reading progress', error });
+        res.status(500).json({ success: false, message: 'Error updating reading progress', error });
     }
 };
 exports.updateReadingProgress = updateReadingProgress;
-// Get Reading Progress for a Novel
+// Get Reading Progress
 const getReadingProgress = async (req, res) => {
     try {
         const { novelId } = req.query;
@@ -56,32 +55,60 @@ const getReadingProgress = async (req, res) => {
             res.status(401).json({ message: 'Unauthorized' });
             return;
         }
-        if (!novelId) {
-            res.status(400).json({ message: 'Novel ID is required' });
+        // If novelId is provided, get progress for that specific novel
+        if (novelId) {
+            const progress = await prisma_1.prisma.readingProgress.findUnique({
+                where: {
+                    userId_novelId: {
+                        userId,
+                        novelId: String(novelId)
+                    }
+                },
+                include: {
+                    chapter: {
+                        select: {
+                            id: true,
+                            title: true,
+                            order: true
+                        }
+                    }
+                }
+            });
+            res.json({ success: true, data: progress });
             return;
         }
-        const progress = await prisma_1.default.readingProgress.findUnique({
-            where: {
-                userId_novelId: {
-                    userId,
-                    novelId: String(novelId)
-                }
-            },
+        // If no novelId, return ALL progress for the user
+        // For now, let's just return all as "ongoing" or categorize them
+        const allProgress = await prisma_1.prisma.readingProgress.findMany({
+            where: { userId },
             include: {
-                chapter: {
+                novel: {
                     select: {
                         id: true,
                         title: true,
-                        order: true
+                        coverImageUrl: true,
+                        author: { select: { name: true } }
                     }
                 }
             }
         });
-        res.json(progress); // Returns null if not found, which is fine
+        // Format for frontend ReadingProgressContext
+        const formattedProgress = {
+            ongoing: allProgress.map(p => ({
+                novelId: p.novelId,
+                novelTitle: p.novel.title,
+                coverImage: p.novel.coverImageUrl,
+                author: p.novel.author?.name || 'Unknown',
+                lastChapter: p.chapterId,
+                updatedAt: p.lastRead
+            })),
+            completed: [] // We don't have a completion flag in DB yet, but could add it
+        };
+        res.json({ success: true, data: formattedProgress });
     }
     catch (error) {
         console.error('getReadingProgress error:', error);
-        res.status(500).json({ message: 'Error fetching reading progress', error });
+        res.status(500).json({ success: false, message: 'Error fetching reading progress', error });
     }
 };
 exports.getReadingProgress = getReadingProgress;

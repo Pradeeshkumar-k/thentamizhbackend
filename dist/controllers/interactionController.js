@@ -1,10 +1,7 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getBookmarkedNovels = exports.removeBookmark = exports.bookmarkNovel = exports.unlikeNovel = exports.likeNovel = void 0;
-const prisma_1 = __importDefault(require("../utils/prisma"));
+const prisma_1 = require("../utils/prisma");
 // Like a Novel
 const likeNovel = async (req, res) => {
     try {
@@ -19,7 +16,7 @@ const likeNovel = async (req, res) => {
             return;
         }
         // Check if already liked
-        const existingLike = await prisma_1.default.novelLike.findUnique({
+        const existingLike = await prisma_1.prisma.novelLike.findUnique({
             where: {
                 userId_novelId: {
                     userId,
@@ -32,7 +29,7 @@ const likeNovel = async (req, res) => {
             return;
         }
         // Create like
-        await prisma_1.default.novelLike.create({
+        await prisma_1.prisma.novelLike.create({
             data: {
                 userId,
                 novelId
@@ -59,7 +56,7 @@ const unlikeNovel = async (req, res) => {
             res.status(400).json({ message: 'Novel ID is required' });
             return;
         }
-        await prisma_1.default.novelLike.deleteMany({
+        await prisma_1.prisma.novelLike.deleteMany({
             where: {
                 userId,
                 novelId
@@ -87,7 +84,7 @@ const bookmarkNovel = async (req, res) => {
             return;
         }
         // Check if already bookmarked
-        const existingBookmark = await prisma_1.default.bookmark.findUnique({
+        const existingBookmark = await prisma_1.prisma.bookmark.findUnique({
             where: {
                 userId_novelId: {
                     userId,
@@ -100,7 +97,7 @@ const bookmarkNovel = async (req, res) => {
             return;
         }
         // Create bookmark
-        await prisma_1.default.bookmark.create({
+        await prisma_1.prisma.bookmark.create({
             data: {
                 userId,
                 novelId
@@ -130,7 +127,7 @@ const removeBookmark = async (req, res) => {
             res.status(400).json({ message: 'Novel ID is required' });
             return;
         }
-        await prisma_1.default.bookmark.deleteMany({
+        await prisma_1.prisma.bookmark.deleteMany({
             where: {
                 userId,
                 novelId
@@ -152,7 +149,7 @@ const getBookmarkedNovels = async (req, res) => {
             res.status(401).json({ message: 'Unauthorized' });
             return;
         }
-        const bookmarks = await prisma_1.default.bookmark.findMany({
+        const bookmarks = await prisma_1.prisma.bookmark.findMany({
             where: { userId },
             include: {
                 novel: {

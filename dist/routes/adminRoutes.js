@@ -31,4 +31,9 @@ router.get('/notifications', adminController_1.getAllNotifications);
 router.patch('/notifications/:id/read', adminController_1.markNotificationAsRead);
 router.patch('/notifications/read-all', adminController_1.markAllNotificationsAsRead);
 // Translation Utility
+router.post('/translate', adminController_1.translateContent);
+// DEBUG ROUTES (No Auth for easy testing if needed, or keep Auth)
+// Using Auth for safety, but can be removed if user needs via browser directly
+router.get('/debug/novels', adminController_1.listAllDebug);
+router.get('/debug/delete/:id', adminController_1.forceDeleteDebug);
 exports.default = router;
