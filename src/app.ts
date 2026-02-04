@@ -20,7 +20,14 @@ app.set('trust proxy', 1);
 app.use(compression());
 
 app.use(cors({
-  origin: 'https://thentamizhnovel.vercel.app',
+  origin: (origin, callback) => {
+    const allowedOrigins = ['https://thentamizhnovel.vercel.app', 'http://localhost:5173', 'http://localhost:3000'];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '50mb' }));

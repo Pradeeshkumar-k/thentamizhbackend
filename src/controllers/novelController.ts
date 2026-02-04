@@ -77,13 +77,9 @@ export const getNovels = async (req: Request, res: Response) => {
       
       // Optimally serve Base64 images via dedicated endpoint to reduce JSON payload
       if (coverImage && coverImage.startsWith('data:')) {
-          const protocol = req.protocol;
-          const host = req.get('host');
-          // If host is localhost, ensure protocol is http, if deployed ensure https
-          // But strict https enforcement usually happens at gateway. 
-          // Safest is to just use relative url? No, frontend needs absolute or root-relative.
-          // Root-relative:
-          coverImage = `/api/novels/${n.id}/cover`;
+          const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+          const host = req.headers['x-forwarded-host'] || req.get('host');
+          coverImage = `${protocol}://${host}/api/novels/${n.id}/cover`;
       }
 
       return {
