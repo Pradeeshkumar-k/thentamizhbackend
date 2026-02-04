@@ -73,11 +73,17 @@ export const getNovels = async (req: Request, res: Response) => {
 
 
     const normalized = novels.map(n => {
-      // ⚠️ Optimize: Prevent huge Base64 strings from crashing Vercel (Limit 4.5MB total response)
       let coverImage = n.coverImageUrl;
-      if (coverImage && coverImage.startsWith('data:') && coverImage.length > 153600) { // > 150KB (Approx)
-          console.warn(`[Optimization] Dropping large Base64 cover for novel ${n.id} in list view`);
-          coverImage = null; // Frontend will show placeholder
+      
+      // Optimally serve Base64 images via dedicated endpoint to reduce JSON payload
+      if (coverImage && coverImage.startsWith('data:')) {
+          const protocol = req.protocol;
+          const host = req.get('host');
+          // If host is localhost, ensure protocol is http, if deployed ensure https
+          // But strict https enforcement usually happens at gateway. 
+          // Safest is to just use relative url? No, frontend needs absolute or root-relative.
+          // Root-relative:
+          coverImage = `/api/novels/${n.id}/cover`;
       }
 
       return {
@@ -122,6 +128,53 @@ export const getNovels = async (req: Request, res: Response) => {
       details: err instanceof Error ? err.stack : undefined
     });
   }
+};
+
+// Serve Cover Image directly (Decoder for Base64)
+export const getNovelCover = async (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    try {
+        const novel = await prisma.novel.findUnique({
+            where: { id },
+            select: { coverImageUrl: true }
+        });
+
+        if (!novel || !novel.coverImageUrl) {
+            return res.status(404).send('Not found');
+        }
+
+        const cover = novel.coverImageUrl;
+
+        // If it's a URL, redirect
+        if (cover.startsWith('http')) {
+            return res.redirect(cover);
+        }
+
+        // If Base64, decode and serve
+        if (cover.startsWith('data:')) {
+            const matches = cover.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+            if (!matches || matches.length !== 3) {
+                return res.status(500).send('Invalid base64 string');
+            }
+
+            const type = matches[1];
+            const buffer = Buffer.from(matches[2], 'base64');
+
+            res.writeHead(200, {
+                'Content-Type': type,
+                'Content-Length': buffer.length,
+                'Cache-Control': 'public, max-age=86400' // Cache for 1 day
+            });
+            res.end(buffer);
+            return;
+        }
+
+        res.status(404).send('Image format not supported via API');
+
+    } catch (error) {
+        console.error('[GET COVER ERROR]', error);
+        res.status(500).send('Server Error');
+    }
 };
 
 export const getNovelById = async (req: Request, res: Response) => {

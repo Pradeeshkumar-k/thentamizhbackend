@@ -2,6 +2,7 @@ import express from 'express';
 import { 
   getNovels, 
   getNovelById, 
+  getNovelCover,
   getChaptersByNovel,
   createNovel, 
   updateNovel, 
@@ -26,6 +27,7 @@ router.get('/bookmarks', authenticate, getBookmarkedNovels);
 
 router.get('/', getNovels);
 router.get('/:id', getNovelById);
+router.get('/:id/cover', getNovelCover);
 router.post('/:id/view', incrementNovelView);
 router.get('/:id/chapters', getChaptersByNovel);
 
