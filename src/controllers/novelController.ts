@@ -113,10 +113,13 @@ export const getNovels = async (req: Request, res: Response) => {
     });
   } catch (err) {
     console.error('[GET NOVELS ERROR]', err);
-    console.error('[GET NOVELS STACK]', (err as Error).stack);
+    if (err instanceof Error) {
+        console.error('[GET NOVELS STACK]', err.stack);
+    }
     res.status(500).json({ 
       message: 'Server error',
-      error: String(err)
+      error: err instanceof Error ? err.message : String(err),
+      details: err instanceof Error ? err.stack : undefined
     });
   }
 };
