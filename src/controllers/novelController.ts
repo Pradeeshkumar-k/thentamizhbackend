@@ -30,16 +30,22 @@ const buildCacheKey = (query: any) => {
 };
 
 // Cache Invalidation
+// Cache Invalidation for Novels
+// Cache Invalidation for Novels (Version-based)
 export const invalidateNovelCache = async () => {
     if (redis) {
-        // Find keys pattern "novels:list:*"
-        // Note: In production with many keys, usage of KEYS command is discouraged. 
-        // But for this scale it's acceptable, or manage a 'cache-version' key.
-        const keys = await redis.keys('novels:list:*');
-        if (keys.length > 0) {
-            await redis.del(keys);
-            console.log(`[CACHE] Invalidated ${keys.length} keys`);
-        }
+        // Increment version to verify old keys (O(1) invalidation)
+        await redis.incr('novels:cache:version');
+        console.log('[CACHE] Invalidated novel list via version increment');
+    }
+};
+
+// Cache Invalidation for Chapters
+export const invalidateChapterCache = async (novelId: string) => {
+    if (redis) {
+        const key = `chapters:novel:${novelId}`;
+        await redis.del(key);
+        console.log(`[CACHE] Invalidated chapters for novel ${novelId}`);
     }
 };
 
@@ -64,8 +70,13 @@ export const getNovels = async (req: Request, res: Response) => {
     // console.log('[GET NOVELS] Starting request...');
     // console.log('[GET NOVELS] limit:', limit);
     
-    // Redis Cache Key (Stable)
-    const cacheKey = buildCacheKey(req.query);
+    // Redis Cache Key (Stable + Versioned)
+    let cacheVersion = '1';
+    if (redis) {
+        cacheVersion = await redis.get('novels:cache:version') || '1';
+    }
+    const internalKey = buildCacheKey(req.query); // novels:list:{sorted_params}
+    const cacheKey = `${internalKey}:v${cacheVersion}`;
     
     // Try to get from cache
     if (redis) {
@@ -74,7 +85,7 @@ export const getNovels = async (req: Request, res: Response) => {
         console.timeEnd('Redis Get');
         if (cached) {
             console.log('[CACHE HIT]', cacheKey);
-            res.setHeader("Cache-Control", "public, max-age=60");
+            res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
             return res.json(JSON.parse(cached));
         }
     }
@@ -134,7 +145,8 @@ export const getNovels = async (req: Request, res: Response) => {
        await redis.setex(cacheKey, 300, JSON.stringify(response));
     }
 
-    res.setHeader("Cache-Control", "public, max-age=60");
+    // SWR: Cache for 1 min, but allow stale for another 30s while revalidating
+    res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
     res.json(response);
   } catch (err) {
     console.error('[GET NOVELS ERROR]', err);
@@ -252,6 +264,8 @@ export const getNovelById = async (req: Request, res: Response) => {
       bookmarks: undefined
     };
 
+    // PRIVATE: Contains user-specific data (likes/bookmarks)
+    res.setHeader("Cache-Control", "private, no-store");
     res.json(normalizedNovel);
   } catch (err) {
     console.error("GET NOVEL ERROR:", err);
@@ -379,9 +393,20 @@ export const deleteNovel = async (req: Request, res: Response) => {
 // Public: Get chapters for a novel
 export const getChaptersByNovel = async (req: Request, res: Response): Promise<void> => {
   try {
-    res.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
     const id = String(req.params.id);
+    const cacheKey = `chapters:novel:${id}`;
 
+    // 1. Try Cache
+    if (redis) {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+            res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
+            res.json(JSON.parse(cached));
+            return;
+        }
+    }
+
+    // 2. DB Query
     const chapters = await prisma.chapter.findMany({
       where: { novelId: id },
       orderBy: { order: 'asc' },
@@ -397,12 +422,12 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
       }
     });
 
-    // Fetch Redis View Counts for these chapters
+    // 3. Fetch Redis View Counts for these chapters
     const chapterIds = chapters.map(c => c.id);
     const redisViews = await getRedisViewCounts('chapter', chapterIds);
 
     const formattedChapters = chapters.map((ch: any) => ({
-      _id: ch.id,
+      _id: ch.id, // Legacy compatibility
       id: ch.id,
       novelId: id,
       title: ch.title,
@@ -415,10 +440,18 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
       updatedAt: ch.updatedAt
     }));
 
-    res.json({
+    const response = {
       chapters: formattedChapters,
       success: true
-    });
+    };
+
+    // 4. Store in Cache (5 mins)
+    if (redis) {
+        await redis.setex(cacheKey, 300, JSON.stringify(response));
+    }
+
+    res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
+    res.json(response);
   } catch (error) {
     console.error('getChaptersByNovel error:', error);
     res.status(500).json({ message: 'Error fetching chapters', error });

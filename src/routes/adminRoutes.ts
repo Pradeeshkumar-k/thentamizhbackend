@@ -16,8 +16,6 @@ import {
   markNotificationAsRead,
   markAllNotificationsAsRead,
   translateContent,
-  listAllDebug,
-  forceDeleteDebug,
   deleteActivityLog
 } from '../controllers/adminController';
 
@@ -57,9 +55,6 @@ router.patch('/notifications/read-all', markAllNotificationsAsRead);
 // Translation Utility
 router.post('/translate', translateContent);
 
-// DEBUG ROUTES (No Auth for easy testing if needed, or keep Auth)
-// Using Auth for safety, but can be removed if user needs via browser directly
-router.get('/debug/novels', listAllDebug);
-router.get('/debug/delete/:id', forceDeleteDebug);
+// DEBUG ROUTES (Removed for Production Security)
 
 export default router;

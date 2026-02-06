@@ -1,9 +1,10 @@
 import { Request, Response } from 'express';
+import { authenticate, authorizeRole } from '../middlewares/authMiddleware';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { prisma } from '../utils/prisma';
 import { translateContent as performTranslation } from '../services/translationService';
 import { ImageService } from '../services/imageService';
-import { invalidateNovelCache } from './novelController';
+import { invalidateNovelCache, invalidateChapterCache } from './novelController';
 
 
 // ============================================
@@ -227,7 +228,7 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
     });
 
     // Invalidate Cache
-    invalidateNovelCache();
+    await invalidateNovelCache();
 
     res.status(201).json({
       success: true,
@@ -270,10 +271,12 @@ export const updateNovel = async (req: AuthRequest, res: Response): Promise<void
         data: { thumbnailUrl: finalCoverImageUrl }
       });
       console.log(`Updated cover image for all chapters of novel ${id}`);
+      await invalidateChapterCache(id); // Chapters changed
     }
 
     // Invalidate Cache
-    invalidateNovelCache();
+    // Invalidate Cache
+    await invalidateNovelCache();
 
     res.json({
       success: true,
@@ -297,6 +300,9 @@ export const deleteNovel = async (req: Request, res: Response) => {
         deletedAt: new Date()
       }
     });
+
+    await invalidateNovelCache();
+    await invalidateChapterCache(String(req.params.id));
 
     res.status(200).json({ message: 'Novel deleted successfully' });
   } catch (err) {
@@ -401,6 +407,9 @@ export const createChapter = async (req: AuthRequest, res: Response): Promise<vo
       data: chapter,
       message: 'Chapter created successfully'
     });
+
+    // Invalidate Cache
+    await invalidateChapterCache(novelId);
   } catch (error: any) {
     console.error('--- Admin Create Chapter ERROR ---');
     console.error('Data:', { novelId: req.params.novelId, body: req.body });
@@ -439,6 +448,9 @@ export const updateChapter = async (req: AuthRequest, res: Response): Promise<vo
       data: chapter,
       message: 'Chapter updated successfully'
     });
+
+    // Invalidate Cache
+    await invalidateChapterCache(chapter.novelId);
   } catch (error) {
     console.error('Update chapter error:', error);
     res.status(500).json({ message: 'Error updating chapter', error });
@@ -456,19 +468,21 @@ export const deleteChapter = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // Manual Cascade Delete (Sequential - No Transaction)
-    // 1. Delete Dependencies
-    await prisma.comment.deleteMany({ where: { chapterId: id } });
-    await prisma.like.deleteMany({ where: { chapterId: id } });
-    await prisma.readingProgress.deleteMany({ where: { chapterId: id } });
-
-    // 2. Delete Chapter
-    await prisma.chapter.delete({ where: { id } });
+    // Transaction (Atomic Delete)
+    await prisma.$transaction([
+        prisma.comment.deleteMany({ where: { chapterId: id } }),
+        prisma.like.deleteMany({ where: { chapterId: id } }),
+        prisma.readingProgress.deleteMany({ where: { chapterId: id } }),
+        prisma.chapter.delete({ where: { id } })
+    ]);
 
     res.json({
       success: true,
       message: 'Chapter deleted successfully'
     });
+
+    // Invalidate Cache
+    await invalidateChapterCache(existing.novelId);
   } catch (error: any) {
     console.error("ADMIN DELETE CHAPTER ERROR:", error);
     res.status(500).json({ message: 'Error deleting chapter', error: error.message });
@@ -572,73 +586,9 @@ export const translateContent = async (req: AuthRequest, res: Response): Promise
   }
 };
 
-// ============================================
-// DEBUG TOOLS (Temporary)
-// ============================================
+// DEBUG TOOLS REMOVED FOR PRODUCTION SECURITY
 
-export const listAllDebug = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const novels = await prisma.novel.findMany({ select: { id: true, title: true, status: true, authorId: true } });
-        res.json({ count: novels.length, novels });
-    } catch (e: any) {
-        res.status(500).json({ error: e.message });
-    }
-};
 
-export const forceDeleteDebug = async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params as { id: string };
-    const logs: string[] = [];
-    const log = (msg: string) => logs.push(msg);
-
-    try {
-        log(`Starting Force Delete for ${id}`);
-        
-        // 1. Reading Progress
-        const rp = await prisma.readingProgress.deleteMany({ where: { novelId: id } });
-        log(`Deleted ${rp.count} ReadingProgress records`);
-
-        // 2. Bookmarks
-        const bk = await prisma.bookmark.deleteMany({ where: { novelId: id } });
-        log(`Deleted ${bk.count} Bookmarks`);
-
-        // 3. Novel Likes
-        const nl = await prisma.novelLike.deleteMany({ where: { novelId: id } });
-        log(`Deleted ${nl.count} NovelLikes`);
-
-        // 4. Get Chapters
-        const chapters = await prisma.chapter.findMany({ where: { novelId: id }, select: { id: true } });
-        log(`Found ${chapters.length} chapters`);
-        const chIds = chapters.map(c => c.id);
-
-        if (chIds.length > 0) {
-            // 5. Chapter Children
-            const cm = await prisma.comment.deleteMany({ where: { chapterId: { in: chIds } } });
-            log(`Deleted ${cm.count} Comments`);
-            
-            const cl = await prisma.like.deleteMany({ where: { chapterId: { in: chIds } } });
-            log(`Deleted ${cl.count} ChapterLikes`);
-
-            // Extra safety for ReadingProgress by chapter if any stray ones exist
-            const rpCh = await prisma.readingProgress.deleteMany({ where: { chapterId: { in: chIds } } });
-            log(`Deleted ${rpCh.count} stray ReadingProgress by Chapter`);
-
-            // 6. Delete Chapters
-            const chDel = await prisma.chapter.deleteMany({ where: { novelId: id } });
-            log(`Deleted ${chDel.count} Chapters`);
-        }
-
-        // 7. Delete Novel
-        const nDel = await prisma.novel.delete({ where: { id } });
-        log(`Deleted Novel: ${nDel.title}`);
-
-        invalidateNovelCache();
-        res.json({ success: true, logs });
-
-    } catch (e: any) {
-        log(`ERROR: ${e.message}`);
-        res.status(500).json({ success: false, logs, error: e.message });
-    }
-};
 
 // ============================================
 // ACTIVITY LOG MANAGEMENT
