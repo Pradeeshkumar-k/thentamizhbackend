@@ -118,6 +118,7 @@ model Bookmark {
   user      User     @relation(fields: [userId], references: [id])
 
   @@unique([userId, novelId])
+  @@index([novelId])
 }
 
 /* ===================== NOVEL LIKE ===================== */
@@ -132,6 +133,7 @@ model NovelLike {
   user      User     @relation(fields: [userId], references: [id])
 
   @@unique([userId, novelId])
+  @@index([novelId])
 }
 
 /* ===================== READING PROGRESS ===================== */

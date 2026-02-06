@@ -18,9 +18,18 @@ const getUserIdFromHeader = (authHeader?: string): string | null => {
   }
 };
 
-// Cache Invalidation (No-op as in-memory cache is removed)
-export const invalidateNovelCache = () => {
-    // console.log('[Cache] Invalidation called (Cache Disabled)');
+// Cache Invalidation
+export const invalidateNovelCache = async () => {
+    if (redis) {
+        // Find keys pattern "novels:list:*"
+        // Note: In production with many keys, usage of KEYS command is discouraged. 
+        // But for this scale it's acceptable, or manage a 'cache-version' key.
+        const keys = await redis.keys('novels:list:*');
+        if (keys.length > 0) {
+            await redis.del(keys);
+            console.log(`[CACHE] Invalidated ${keys.length} keys`);
+        }
+    }
 };
 
 export const getNovels = async (req: Request, res: Response) => {
@@ -53,6 +62,21 @@ export const getNovels = async (req: Request, res: Response) => {
         throw dbError;
     }
 
+    // Redis Cache Key
+    const cacheKey = `novels:list:${JSON.stringify(req.query)}`;
+    
+    // Try to get from cache
+    if (redis) {
+        console.time('Redis Get');
+        const cached = await redis.get(cacheKey);
+        console.timeEnd('Redis Get');
+        if (cached) {
+            console.log('[CACHE HIT]', cacheKey);
+            return res.json(JSON.parse(cached));
+        }
+    }
+
+    console.time('DB Query');
     const novels = await prisma.novel.findMany({
       take: limit,
       ...(cursor && { cursor: { id: cursor }, skip: 1 }),
@@ -70,6 +94,7 @@ export const getNovels = async (req: Request, res: Response) => {
         _count: { select: { chapters: true, likes: true, bookmarks: true } }
       },
     });
+    console.timeEnd('DB Query');
 
 
     const normalized = novels.map(n => {
@@ -96,23 +121,18 @@ export const getNovels = async (req: Request, res: Response) => {
       };
     });
 
-    res.setHeader(
-      'Cache-Control',
-      'private, no-store, max-age=0, must-revalidate'
-    );
-
-    // 🔥 Controlled translation trigger (Queue/Fire-and-forget)
-    novels.forEach(n => {
-      if (!n.titleEn) {
-        addTranslationJob('novel', n.id);
-      }
-    });
-
-    res.json({
+    const response = {
       novels: normalized,
       nextCursor: novels.length ? novels[novels.length - 1].id : null,
       hasMore: novels.length === limit,
-    });
+    };
+
+    // Store in cache (expire in 5 minutes)
+    if (redis) {
+       await redis.setex(cacheKey, 300, JSON.stringify(response));
+    }
+
+    res.json(response);
   } catch (err) {
     console.error('[GET NOVELS ERROR]', err);
     if (err instanceof Error) {

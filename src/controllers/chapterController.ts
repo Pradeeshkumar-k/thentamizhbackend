@@ -2,9 +2,10 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { prisma } from '../utils/prisma';
 import { TranslationService } from '../services/translationService';
-import { addTranslationJob } from '../utils/queue';
 import { decodeAccessToken } from '../utils/jwt';
 import redis, { getRedisViewCount, incrementViewCount } from '../utils/redis';
+import { invalidateNovelCache } from './novelController';
+import { addTranslationJob } from '../utils/queue';
 
 // Public: Get chapter content
 // 🚀 FAST & SAFE - READ ONLY
@@ -94,6 +95,8 @@ export const createChapter = async (req: Request, res: Response): Promise<void> 
         thumbnailUrl
       },
     });
+    // Invalidate cache to update chapter count on novel list
+    await invalidateNovelCache();
     res.status(201).json(chapter);
   } catch (error) {
     res.status(500).json({ message: 'Error creating chapter', error: (error as any).message });
@@ -137,6 +140,8 @@ export const deleteChapter = async (req: Request, res: Response) => {
         await tx.readingProgress.deleteMany({ where: { chapterId: id } });
         await tx.chapter.delete({ where: { id } });
     });
+
+    await invalidateNovelCache();
 
     res.json({ message: 'Chapter deleted successfully' });
   } catch (error) {
