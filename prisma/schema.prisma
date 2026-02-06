@@ -180,3 +180,11 @@ enum NovelStatus {
   COMPLETED
   DELETED
 }
+
+/* ===================== ACTIVITY LOG ===================== */
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  action    String
+  timestamp DateTime @default(now())
+}
