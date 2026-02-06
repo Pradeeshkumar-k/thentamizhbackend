@@ -43,6 +43,18 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json({ limit: '50mb' }));
+import rateLimit from 'express-rate-limit';
+
+const limiter = rateLimit({
+	windowMs: 15 * 60 * 1000, // 15 minutes
+	limit: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes).
+	standardHeaders: 'draft-7',
+	legacyHeaders: false,
+});
+
+// Apply the rate limiting middleware to all requests.
+app.use(limiter);
+
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 import { checkHealth } from './controllers/healthController';
@@ -59,6 +71,15 @@ app.get('/api/health', checkHealth);
 
 app.get('/', (req, res) => {
   res.send('Novel Platform Backend is running!');
+});
+
+// Global Error Handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('[Global Error]', err);
+  res.status(500).json({
+    message: 'Internal Server Error',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
 });
 
 export default app;

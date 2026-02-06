@@ -18,6 +18,17 @@ const getUserIdFromHeader = (authHeader?: string): string | null => {
   }
 };
 
+// Helper: Build stable Redis cache key (Sorted query params)
+const buildCacheKey = (query: any) => {
+  const sorted = Object.keys(query)
+    .sort()
+    .reduce((acc: any, key) => {
+      acc[key] = query[key];
+      return acc;
+    }, {});
+  return `novels:list:${JSON.stringify(sorted)}`;
+};
+
 // Cache Invalidation
 export const invalidateNovelCache = async () => {
     if (redis) {
@@ -34,7 +45,7 @@ export const invalidateNovelCache = async () => {
 
 export const getNovels = async (req: Request, res: Response) => {
   try {
-    const limit = 20;
+    const limit = Math.min(Number(req.query.limit || 20), 50);
     const cursor = req.query.cursor as string | undefined;
     const search = req.query.search?.toString();
 
@@ -50,20 +61,11 @@ export const getNovels = async (req: Request, res: Response) => {
       ];
     }
 
-    console.log('[GET NOVELS] Starting request...');
-    console.log('[GET NOVELS] limit:', limit);
+    // console.log('[GET NOVELS] Starting request...');
+    // console.log('[GET NOVELS] limit:', limit);
     
-    // Test Connection
-    try {
-        await prisma.$queryRaw`SELECT 1`;
-        console.log('[GET NOVELS] DB Connection OK');
-    } catch (dbError) {
-        console.error('[GET NOVELS] DB Connection FAILED', dbError);
-        throw dbError;
-    }
-
-    // Redis Cache Key
-    const cacheKey = `novels:list:${JSON.stringify(req.query)}`;
+    // Redis Cache Key (Stable)
+    const cacheKey = buildCacheKey(req.query);
     
     // Try to get from cache
     if (redis) {
@@ -72,6 +74,7 @@ export const getNovels = async (req: Request, res: Response) => {
         console.timeEnd('Redis Get');
         if (cached) {
             console.log('[CACHE HIT]', cacheKey);
+            res.setHeader("Cache-Control", "public, max-age=60");
             return res.json(JSON.parse(cached));
         }
     }
@@ -85,13 +88,11 @@ export const getNovels = async (req: Request, res: Response) => {
       select: {
         id: true,
         title: true,
-        titleEn: true,
-        coverImageUrl: true,
+        coverImageUrl: true, // Only need coverImageUrl, not titleEn or status for list
         views: true,
-        status: true,
         createdAt: true,
         author: { select: { name: true } },
-        _count: { select: { chapters: true, likes: true, bookmarks: true } }
+        _count: { select: { chapters: true } } // Removed likes/bookmarks counts for speed
       },
     });
     console.timeEnd('DB Query');
@@ -114,14 +115,11 @@ export const getNovels = async (req: Request, res: Response) => {
       return {
         id: n.id,
         title: n.title,
-        titleEn: n.titleEn,
         coverImage: coverImage,
         views: (n.views || 0) + (redisViews[n.id] || 0), // Merge DB + Redis
         createdAt: n.createdAt,
         authorName: n.author?.name ?? 'Unknown',
-        totalChapters: n._count?.chapters || 0,
-        likeCount: n._count?.likes || 0,
-        status: n.status
+        totalChapters: n._count?.chapters || 0
       };
     });
 
@@ -136,6 +134,7 @@ export const getNovels = async (req: Request, res: Response) => {
        await redis.setex(cacheKey, 300, JSON.stringify(response));
     }
 
+    res.setHeader("Cache-Control", "public, max-age=60");
     res.json(response);
   } catch (err) {
     console.error('[GET NOVELS ERROR]', err);
@@ -183,7 +182,7 @@ export const getNovelCover = async (req: Request, res: Response) => {
             res.writeHead(200, {
                 'Content-Type': type,
                 'Content-Length': buffer.length,
-                'Cache-Control': 'public, max-age=86400' // Cache for 1 day
+                'Cache-Control': 'public, max-age=604800, immutable' // Cache for 7 days
             });
             res.end(buffer);
             return;
@@ -220,10 +219,6 @@ export const getNovelById = async (req: Request, res: Response) => {
         coverImageUrl: true,
         views: true,
         author: { select: { name: true } },
-        chapters: {
-          orderBy: { order: 'asc' },
-          select: { id: true, title: true, titleEn: true, order: true, views: true }
-        },
         _count: { select: { chapters: true, likes: true, bookmarks: true } },
         // Check if user has liked/bookmarked
         likes: userId ? { where: { userId }, select: { id: true } } : false,
@@ -305,7 +300,7 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
       },
     });
 
-    invalidateNovelCache();
+    await invalidateNovelCache();
     res.status(201).json(novel);
   } catch (error: any) {
     console.error('createNovel error:', error);
@@ -349,7 +344,7 @@ export const updateNovel = async (req: Request, res: Response) => {
       data: dbData,
     });
 
-    invalidateNovelCache();
+    await invalidateNovelCache();
     res.json({ success: true, data: novel });
   } catch (error: any) {
     console.error('updateNovel error:', error);
@@ -361,24 +356,19 @@ export const updateNovel = async (req: Request, res: Response) => {
 export const deleteNovel = async (req: Request, res: Response) => {
   const id = String(req.params.id);
   try {
-    res.status(202).json({ message: 'Deletion processing in background' });
-
-    setImmediate(async () => {
-        try {
-            await prisma.novel.update({
-                where: { id },
-                data: { 
-                    status: 'DELETED',
-                    // @ts-ignore
-                    deletedAt: new Date() 
-                }
-            });
-            invalidateNovelCache();
-            console.log(`[SOFT DELETE] Novel ${id} marked as deleted`);
-        } catch (err) {
-            console.error("[SOFT DELETE FAILED]", err);
+    await prisma.novel.update({
+        where: { id },
+        data: { 
+            status: 'DELETED',
+            // @ts-ignore
+            deletedAt: new Date() 
         }
     });
+
+    await invalidateNovelCache();
+    console.log(`[SOFT DELETE] Novel ${id} marked as deleted`);
+
+    res.json({ message: 'Novel deleted successfully' });
 
   } catch (error: any) {
     console.error("DELETE NOVEL ERROR:", error);

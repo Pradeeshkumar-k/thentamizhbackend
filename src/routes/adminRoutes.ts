@@ -24,7 +24,8 @@ import {
 const router = express.Router();
 
 // Translation Utility (diagnostic move)
-router.post('/translate', translateContent);
+// Translation Utility (diagnostic move)
+// router.post('/translate', translateContent); // MOVED: Now protected below
 
 // All admin routes require authentication and ADMIN role
 router.use(authenticate);
