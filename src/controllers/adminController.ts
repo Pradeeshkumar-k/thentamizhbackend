@@ -20,24 +20,16 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
       prisma.bookmark.count()
     ]);
 
-    // Get recent activity (last 10 novels)
-    const recentNovels = await prisma.novel.findMany({
+    // Get recent activity (from ActivityLog)
+    const recentActivityLogs = await prisma.activityLog.findMany({
       take: 10,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        title: true,
-        createdAt: true,
-        author: {
-          select: { name: true }
-        }
-      }
+      orderBy: { timestamp: 'desc' }
     });
 
-    const recentActivity = recentNovels.map((novel: any) => ({
-      id: novel.id,
-      action: `New novel "${novel.title}" by ${novel.author.name}`,
-      timestamp: novel.createdAt.toISOString()
+    const recentActivity = recentActivityLogs.map((log: any) => ({
+      id: log.id,
+      action: log.action,
+      timestamp: log.timestamp.toISOString()
     }));
 
     res.json({
@@ -199,6 +191,15 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
         status: finalStatus,
         coverImageUrl: finalCoverImageUrl,
         authorId
+      },
+      include: { author: { select: { name: true } } }
+    });
+
+    // Create Activity Log
+    await prisma.activityLog.create({
+      data: {
+        action: `New novel "${novel.title}" by ${novel.author.name}`,
+        timestamp: new Date()
       }
     });
 
@@ -614,4 +615,25 @@ export const forceDeleteDebug = async (req: Request, res: Response): Promise<voi
         log(`ERROR: ${e.message}`);
         res.status(500).json({ success: false, logs, error: e.message });
     }
+};
+
+// ============================================
+// ACTIVITY LOG MANAGEMENT
+// ============================================
+
+export const deleteActivityLog = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params as { id: string };
+    
+    await prisma.activityLog.delete({
+      where: { id }
+    });
+
+    res.json({
+      success: true,
+      message: 'Activity log deleted successfully'
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting activity log', error });
+  }
 };

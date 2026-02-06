@@ -17,7 +17,8 @@ import {
   markAllNotificationsAsRead,
   translateContent,
   listAllDebug,
-  forceDeleteDebug
+  forceDeleteDebug,
+  deleteActivityLog
 } from '../controllers/adminController';
 
 const router = express.Router();
@@ -31,6 +32,7 @@ router.use(authorizeRole('ADMIN'));
 
 // Dashboard
 router.get('/dashboard/stats', getDashboardStats);
+router.delete('/dashboard/activity/:id', deleteActivityLog);
 
 // Novel Management
 router.get('/novels', getAllNovelsAdmin);
