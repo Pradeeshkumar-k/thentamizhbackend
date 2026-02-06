@@ -19,6 +19,9 @@ router.post('/:id/view', incrementChapterView);
 router.get('/:id', getChapterById);
 router.get('/:id/comments', getCommentsByChapter);
 
+router.post('/:id/like', authenticate, likeChapter);
+router.delete('/:id/like', authenticate, unlikeChapter);
+
 router.post('/', authenticate, authorizeRole('ADMIN'), createChapter);
 
 export default router;
