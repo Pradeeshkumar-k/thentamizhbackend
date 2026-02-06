@@ -13,11 +13,11 @@ import { invalidateNovelCache } from './novelController';
 export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const [totalNovels, totalChapters, totalUsers, totalComments, totalSubscriptions] = await Promise.all([
-      prisma.novel.count(),
-      prisma.chapter.count(),
-      prisma.user.count(),
-      prisma.comment.count(),
-      prisma.bookmark.count()
+      prisma.novel.count({ where: { status: { not: 'DELETED' } } }),
+      prisma.chapter.count({ where: { novel: { status: { not: 'DELETED' } } } }),
+      prisma.user.count(), // Users are rarely "deleted", usually banned or keep account
+      prisma.comment.count({ where: { chapter: { novel: { status: { not: 'DELETED' } } } } }),
+      prisma.bookmark.count({ where: { novel: { status: { not: 'DELETED' } } } })
     ]);
 
     // Get recent activity (Hybrid: Try ActivityLog, fallback to Novel)
