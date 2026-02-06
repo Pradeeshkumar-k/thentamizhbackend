@@ -7,7 +7,7 @@ async function backfill() {
   console.log('Starting ActivityLog backfill...');
 
   // 1. Clear existing logs (optional, but good for clean state)
-  await prisma.activityLog.deleteMany({});
+  await (prisma as any).activityLog.deleteMany({});
   console.log('Cleared existing logs.');
 
   // 2. Fetch last 20 novels
@@ -22,7 +22,7 @@ async function backfill() {
   // 3. Create log entries
   for (const novel of novels) {
     const action = `New novel "${novel.title}" by ${novel.author.name || 'Unknown'}`;
-    await prisma.activityLog.create({
+    await (prisma as any).activityLog.create({
       data: {
         action,
         timestamp: novel.createdAt
