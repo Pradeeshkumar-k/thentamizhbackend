@@ -22,12 +22,24 @@ app.use(compression());
 app.use(cors({
   origin: (origin, callback) => {
     const allowedOrigins = ['https://thentamizhnovel.vercel.app', 'http://localhost:5173', 'http://localhost:3000'];
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
+    
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+
+    // Allow local network IPs (e.g., 192.168.x.x, 10.x.x.x, 172.x.x.x) for mobile testing
+    const localIpRegex = /^(http:\/\/192\.168\.\d{1,3}\.\d{1,3}|http:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}|http:\/\/172\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$/;
+    if (localIpRegex.test(origin)) return callback(null, true);
+
+    // Allow Vercel preview deployments
+    if (origin.endsWith('.vercel.app')) return callback(null, true);
+
+    callback(new Error('Not allowed by CORS'));
   },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: true,
 }));
 app.use(express.json({ limit: '50mb' }));
