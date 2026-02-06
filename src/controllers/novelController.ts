@@ -96,6 +96,10 @@ export const getNovels = async (req: Request, res: Response) => {
     });
     console.timeEnd('DB Query');
 
+    // Fetch Redis Views
+    const ids = novels.map(n => n.id);
+    const redisViews = await getRedisViewCounts('novel', ids);
+
 
     const normalized = novels.map(n => {
       let coverImage = n.coverImageUrl;
@@ -112,7 +116,7 @@ export const getNovels = async (req: Request, res: Response) => {
         title: n.title,
         titleEn: n.titleEn,
         coverImage: coverImage,
-        views: n.views || 0,
+        views: (n.views || 0) + (redisViews[n.id] || 0), // Merge DB + Redis
         createdAt: n.createdAt,
         authorName: n.author?.name ?? 'Unknown',
         totalChapters: n._count?.chapters || 0,
@@ -231,8 +235,9 @@ export const getNovelById = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Not found" });
     }
 
-    // DB views only
-    const totalViews = novel.views || 0;
+    // Merge DB views + Redis views
+    const redisCount = await getRedisViewCount('novel', id);
+    const totalViews = (novel.views || 0) + redisCount;
 
     if (!novel.titleEn || !novel.descriptionEn) {
       addTranslationJob('novel', id);
@@ -402,6 +407,9 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
       }
     });
 
+    // Fetch Redis View Counts for these chapters
+    const chapterIds = chapters.map(c => c.id);
+    const redisViews = await getRedisViewCounts('chapter', chapterIds);
 
     const formattedChapters = chapters.map((ch: any) => ({
       _id: ch.id,
@@ -411,7 +419,7 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
       titleEn: (ch as any).titleEn,
       chapterNumber: ch.order,
       order: ch.order,
-      views: ch.views || 0,
+      views: (ch.views || 0) + (redisViews[ch.id] || 0),
       thumbnail: ch.thumbnailUrl,
       createdAt: ch.createdAt,
       updatedAt: ch.updatedAt
@@ -427,27 +435,16 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
   }
 };
 
-// Public: Increment view count for novel (REAL-TIME FIX)
-// Public: Increment view count for novel (REAL-TIME FIX)
+// Public: Increment view count for novel (BUFFERED via Redis)
 export const incrementNovelView = async (req: Request, res: Response) => {
   const id = String(req.params.id);
   
-  const ip =
-    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-    req.socket.remoteAddress ||
-    'unknown';
-
   try {
-    // Direct DB increment
-    await prisma.novel.update({
-      where: { id },
-      data: { views: { increment: 1 } },
-    });
-
+    // Increment in Redis only
+    await incrementViewCount('novel', id);
     return res.status(204).end();
   } catch (error) {
     console.error("INCREMENT NOVEL VIEW ERROR:", error);
-    // Don't fail the request
     res.status(204).end();
   }
 };

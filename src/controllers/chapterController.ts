@@ -66,9 +66,11 @@ export const getChapterById = async (req: Request, res: Response) => {
       addTranslationJob('chapter', chapterId as string);
     }
 
+    const redisCount = await getRedisViewCount('chapter', chapterId);
+
     res.json({
       ...chapter,
-      views: chapter.views || 0,
+      views: (chapter.views || 0) + redisCount,
       chapterNumber: (chapter as any).order,
       likeCount: (chapter as any)._count?.likes ?? 0,
       likedByMe: userId
@@ -202,7 +204,7 @@ export const unlikeChapter = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Public: Increment view count for chapter (REAL-TIME FIX)
+// Public: Increment view count for chapter (BUFFERED via Redis)
 export const incrementChapterView = async (req: Request, res: Response) => {
   const chapterId = String(req.params.id);
 
@@ -222,7 +224,8 @@ export const incrementChapterView = async (req: Request, res: Response) => {
   }
 
   try {
-    // 1️⃣ Dedup (24h)
+    // 1️⃣ Dedup (24h) via DB (Read-only check, acceptable)
+    // Optimization: Could move dedup to Redis too, but keeping DB for persistent history log logic
     const exists = await prisma.chapterView.findFirst({
       where: {
         chapterId,
@@ -237,13 +240,11 @@ export const incrementChapterView = async (req: Request, res: Response) => {
     });
 
     if (!exists) {
-      // Direct DB increment
-      await prisma.chapter.update({
-        where: { id: chapterId },
-        data: { views: { increment: 1 } },
-      });
+      // 2️⃣ Increment in Redis (No DB Lock)
+      await incrementViewCount('chapter', chapterId);
 
-      // 3️⃣ Fire-and-forget history log
+      // 3️⃣ Fire-and-forget history log (Insert is faster than Update, but still hits DB)
+      // Ideally this should also be buffered or queued.
       prisma.chapterView.create({
         data: { chapterId, userId, ip }
       }).catch(console.error);
