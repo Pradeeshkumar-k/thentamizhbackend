@@ -87,13 +87,15 @@ export const getChapterById = async (req: Request, res: Response) => {
 
 // Admin: Create chapter
 export const createChapter = async (req: Request, res: Response): Promise<void> => {
-  const { novelId, title, content, order, thumbnailUrl } = req.body;
+  const { novelId, title, titleEn, title_en, content, contentEn, content_en, order, thumbnailUrl } = req.body;
   try {
     const chapter = await prisma.chapter.create({
       data: {
         novelId,
         title,
+        titleEn: titleEn || title_en,
         content,
+        contentEn: contentEn || content_en,
         order,
         thumbnailUrl
       },
@@ -109,7 +111,7 @@ export const createChapter = async (req: Request, res: Response): Promise<void> 
 // Admin: Update chapter
 export const updateChapter = async (req: Request, res: Response) => {
   const { id } = req.params as { id: string };
-  const { title, content, order, thumbnailUrl } = req.body;
+  const { title, titleEn, title_en, content, contentEn, content_en, order, thumbnailUrl } = req.body;
   try {
     const existing = await prisma.chapter.findUnique({ where: { id } });
     if (!existing) {
@@ -119,7 +121,14 @@ export const updateChapter = async (req: Request, res: Response) => {
 
     const chapter = await prisma.chapter.update({
       where: { id },
-      data: { title, content, order, thumbnailUrl },
+      data: { 
+        title, 
+        titleEn: titleEn || title_en, 
+        content, 
+        contentEn: contentEn || content_en, 
+        order, 
+        thumbnailUrl 
+      },
     });
     res.json(chapter);
   } catch (error) {
