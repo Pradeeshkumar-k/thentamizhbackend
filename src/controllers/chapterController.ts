@@ -88,22 +88,28 @@ export const getChapterById = async (req: Request, res: Response) => {
 // Admin: Create chapter
 export const createChapter = async (req: Request, res: Response): Promise<void> => {
   const { novelId, title, titleEn, title_en, content, contentEn, content_en, order, thumbnailUrl } = req.body;
+  
+  const finalTitleEn = titleEn || title_en;
+  const finalContentEn = contentEn || content_en;
+
   try {
     const chapter = await prisma.chapter.create({
       data: {
         novelId,
         title,
-        titleEn: titleEn || title_en,
+        titleEn: finalTitleEn,
         content,
-        contentEn: contentEn || content_en,
+        contentEn: finalContentEn,
         order,
-        thumbnailUrl
+        thumbnailUrl,
+        isTranslating: !!finalContentEn ? false : undefined // If contentEn provided, not translating
       },
     });
     // Invalidate cache to update chapter count on novel list
     await invalidateNovelCache();
     res.status(201).json(chapter);
   } catch (error) {
+    console.error("CREATE CHAPTER ERROR:", error);
     res.status(500).json({ message: 'Error creating chapter', error: (error as any).message });
   }
 };
@@ -112,6 +118,12 @@ export const createChapter = async (req: Request, res: Response): Promise<void> 
 export const updateChapter = async (req: Request, res: Response) => {
   const { id } = req.params as { id: string };
   const { title, titleEn, title_en, content, contentEn, content_en, order, thumbnailUrl } = req.body;
+  
+  const finalTitleEn = titleEn || title_en;
+  const finalContentEn = contentEn || content_en;
+
+  console.log(`[UPDATE CHAPTER] ID: ${id}, TitleEn: ${finalTitleEn ? 'YES' : 'NO'}, ContentEn: ${finalContentEn ? 'YES' : 'NO'}`);
+
   try {
     const existing = await prisma.chapter.findUnique({ where: { id } });
     if (!existing) {
@@ -123,15 +135,17 @@ export const updateChapter = async (req: Request, res: Response) => {
       where: { id },
       data: { 
         title, 
-        titleEn: titleEn || title_en, 
+        titleEn: finalTitleEn, 
         content, 
-        contentEn: contentEn || content_en, 
+        contentEn: finalContentEn, 
         order, 
-        thumbnailUrl 
+        thumbnailUrl,
+        isTranslating: !!finalContentEn ? false : undefined // Force false if content provided
       },
     });
     res.json(chapter);
   } catch (error) {
+    console.error("UPDATE CHAPTER ERROR:", error);
     res.status(500).json({ message: 'Error updating chapter', error: (error as any).message });
   }
 };
