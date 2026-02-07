@@ -396,9 +396,12 @@ export const createChapter = async (req: AuthRequest, res: Response): Promise<vo
       data: {
         novelId,
         title: finalTitle,
+        titleEn: (req.body.titleEn || req.body.title_en || undefined),
         content: content || '',
+        contentEn: (req.body.contentEn || req.body.content_en || undefined), // Add English content
         order: finalOrder,
-        thumbnailUrl: finalThumbnailUrl
+        thumbnailUrl: finalThumbnailUrl,
+        isTranslating: !!(req.body.contentEn || req.body.content_en) ? false : undefined
       }
     });
 
@@ -432,9 +435,17 @@ export const updateChapter = async (req: AuthRequest, res: Response): Promise<vo
     const finalThumbnailUrl = await ImageService.processImage(thumbnailUrl || thumbnail);
     const finalTitle = title || name;
 
+    const finalTitleEn = req.body.titleEn || req.body.title_en;
+    const finalContentEn = req.body.contentEn || req.body.content_en;
+
     const data: any = {};
     if (finalTitle) data.title = finalTitle;
+    if (finalTitleEn) data.titleEn = finalTitleEn;
     if (content !== undefined) data.content = content;
+    if (finalContentEn !== undefined) {
+        data.contentEn = finalContentEn;
+        data.isTranslating = false; // Force false if content provided
+    }
     if (finalOrder !== undefined) data.order = finalOrder;
     if (finalThumbnailUrl !== undefined) data.thumbnailUrl = finalThumbnailUrl;
 
