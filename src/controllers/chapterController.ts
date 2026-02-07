@@ -51,6 +51,7 @@ export const getChapterById = async (req: Request, res: Response) => {
         _count: {
           select: { likes: true, comments: true }
         },
+        isTranslating: true,
         views: true
       }
     });
