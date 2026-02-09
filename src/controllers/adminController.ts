@@ -219,13 +219,17 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
       include: { author: { select: { name: true } } }
     });
 
-    // Create Activity Log
-    await (prisma as any).activityLog.create({
-      data: {
-        action: `New novel "${novel.title}" by ${novel.author.name}`,
-        timestamp: new Date()
-      }
-    });
+    // Create Activity Log (Safely)
+    try {
+      await (prisma as any).activityLog.create({
+        data: {
+          action: `New novel "${novel.title}" by ${novel.author.name}`,
+          timestamp: new Date()
+        }
+      });
+    } catch (logError) {
+      console.warn('Failed to create activity log (non-fatal):', logError);
+    }
 
     // Invalidate Cache
     await invalidateNovelCache();
