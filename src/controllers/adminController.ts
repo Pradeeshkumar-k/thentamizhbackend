@@ -206,8 +206,14 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
     const finalDescription = description || novel_summary || '';
     const finalGenre = Array.isArray(categories) ? categories.join(', ') : (genre || '');
     const finalStatus = (status || 'DRAFT').toUpperCase() as any;
+    console.time('CreateNovel-Total');
+    
+    // Process Image
+    console.time('CreateNovel-ImageProcessing');
     const finalCoverImageUrl = await ImageService.processImage(coverImageUrl || cover_image || coverImage || '');
+    console.timeEnd('CreateNovel-ImageProcessing');
 
+    console.time('CreateNovel-DB-Create');
     const novel = await prisma.novel.create({
       data: {
         title,
@@ -219,21 +225,28 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
       },
       include: { author: { select: { name: true } } }
     });
+    console.timeEnd('CreateNovel-DB-Create');
 
     // Create Activity Log (Safely)
     try {
+      console.time('CreateNovel-ActivityLog');
       await (prisma as any).activityLog.create({
         data: {
           action: `New novel "${novel.title}" by ${novel.author.name}`,
           timestamp: new Date()
         }
       });
+      console.timeEnd('CreateNovel-ActivityLog');
     } catch (logError) {
       console.warn('Failed to create activity log (non-fatal):', logError);
     }
 
     // Invalidate Cache
+    console.time('CreateNovel-CacheInvalidation');
     await invalidateNovelCache();
+    console.timeEnd('CreateNovel-CacheInvalidation');
+
+    console.timeEnd('CreateNovel-Total');
 
     res.status(201).json({
       success: true,
