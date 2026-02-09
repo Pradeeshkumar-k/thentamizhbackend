@@ -119,8 +119,14 @@ export const getNovels = async (req: Request, res: Response) => {
       
       // Optimally serve Base64 images via dedicated endpoint to reduce JSON payload
       if (coverImage && coverImage.startsWith('data:')) {
-          const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+          let protocol = req.headers['x-forwarded-proto'] || req.protocol;
           const host = req.headers['x-forwarded-host'] || req.get('host');
+          
+          // Force HTTPS in production (Vercel/Railway) to avoid mixed content
+          if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+              protocol = 'https';
+          }
+
           coverImage = `${protocol}://${host}/api/novels/${n.id}/cover`;
       }
 
@@ -251,10 +257,24 @@ export const getNovelById = async (req: Request, res: Response) => {
       addTranslationJob('novel', id);
     }
 
+    // Process Cover Image URL (Server-side optimization)
+    let coverImage = (novel as any).coverImageUrl;
+    if (coverImage && coverImage.startsWith('data:')) {
+        let protocol = req.headers['x-forwarded-proto'] || req.protocol;
+        const host = req.headers['x-forwarded-host'] || req.get('host');
+        
+        // Force HTTPS in production
+        if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+            protocol = 'https';
+        }
+        coverImage = `${protocol}://${host}/api/novels/${novel.id}/cover`;
+    }
+
     // Normalize Data (Backend-side)
     const normalizedNovel = {
       ...novel,
-      coverImage: (novel as any).coverImageUrl,
+      coverImage: coverImage,
+      coverImageUrl: coverImage, // Update both for consistency
       author: (novel as any).author?.name || 'Unknown', 
       authorName: (novel as any).author?.name || 'Unknown',
       views: totalViews,
