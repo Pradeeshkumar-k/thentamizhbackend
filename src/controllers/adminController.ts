@@ -109,6 +109,7 @@ export const getAllNovelsAdmin = async (req: AuthRequest, res: Response): Promis
           description: true,
           genre: true,
           status: true,
+          coverImageUrl: true, // Needed for list view
           createdAt: true,
           updatedAt: true,
           author: {
@@ -130,7 +131,7 @@ export const getAllNovelsAdmin = async (req: AuthRequest, res: Response): Promis
       description: novel.description,
       genre: novel.genre,
       status: novel.status,
-      // cover_image excluded for list view performance
+      cover_image: novel.coverImageUrl, // Included for Admin Display
       total_chapters: novel._count.chapters,
       created_at: novel.createdAt,
       updated_at: novel.updatedAt

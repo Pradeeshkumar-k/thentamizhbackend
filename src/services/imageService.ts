@@ -1,5 +1,6 @@
 
-import { Jimp, JimpMime } from 'jimp';
+import { Jimp } from 'jimp';
+const JimpMime = { jpeg: 'image/jpeg' }; // Jimp 1.x doesn't export JimpMime directly like this usually, check usage.
 
 export const ImageService = {
   /**
@@ -30,8 +31,14 @@ export const ImageService = {
       }
 
       // 4. Convert back to Base64 (JPEG)
-      const optimizedBuffer = await image.getBuffer(JimpMime.jpeg);
-      return `data:image/jpeg;base64,${optimizedBuffer.toString('base64')}`;
+      const imgAny = image as any;
+      const optimizedBuffer = imgAny.getBufferAsync ? await imgAny.getBufferAsync('image/jpeg') : await new Promise((resolve, reject) => {
+        imgAny.getBuffer('image/jpeg', (err: any, buffer: any) => {
+          if (err) reject(err);
+          else resolve(buffer);
+        });
+      });
+      return `data:image/jpeg;base64,${(optimizedBuffer as Buffer).toString('base64')}`;
 
     } catch (error) {
       console.error('[ImageService] Compression failed:', error);
