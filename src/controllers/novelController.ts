@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { prisma } from '../utils/prisma';
 import { TranslationService } from '../services/translationService';
+import { ImageService } from '../services/imageService';
 import redis, { getRedisViewCount, getRedisViewCounts, incrementViewCount } from '../utils/redis';
 import { addTranslationJob } from '../utils/queue';
 import { decodeAccessToken } from '../utils/jwt';
@@ -298,7 +299,11 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
         if (categories && Array.isArray(categories)) dbGenre = categories.join(',');
         else if (categories) dbGenre = String(categories);
     }
-    const dbCoverImage = coverImageUrl || cover_image;
+    
+    // Process Image
+    const rawCoverImage = coverImageUrl || cover_image || '';
+    const dbCoverImage = await ImageService.processImage(rawCoverImage);
+
     let dbStatus = status ? status.toUpperCase() : 'DRAFT'; 
 
     const novel = await prisma.novel.create({
@@ -348,7 +353,13 @@ export const updateNovel = async (req: Request, res: Response) => {
     if (genre) dbData.genre = genre;
     else if (categories && Array.isArray(categories)) dbData.genre = categories.join(',');
     else if (categories) dbData.genre = String(categories);
-    if (coverImageUrl || cover_image) dbData.coverImageUrl = coverImageUrl || cover_image;
+    
+    // Process Image if provided
+    if (coverImageUrl || cover_image) {
+        const rawCoverImage = coverImageUrl || cover_image;
+        dbData.coverImageUrl = await ImageService.processImage(rawCoverImage);
+    }
+    
     if (title_en || titleEn) dbData.titleEn = title_en || titleEn;
     if (summary_en || descriptionEn) dbData.descriptionEn = summary_en || descriptionEn;
     if (status) dbData.status = status.toUpperCase();
