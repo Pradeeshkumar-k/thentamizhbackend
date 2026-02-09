@@ -194,7 +194,7 @@ export const getNovelByIdAdmin = async (req: AuthRequest, res: Response): Promis
 
 export const createNovel = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { title, description, novel_summary, genre, categories, status, cover_image, coverImageUrl } = req.body;
+    const { title, description, novel_summary, genre, categories, status, cover_image, coverImageUrl, coverImage } = req.body;
     const authorId = req.user?.userId;
 
     if (!authorId) {
@@ -206,7 +206,7 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
     const finalDescription = description || novel_summary || '';
     const finalGenre = Array.isArray(categories) ? categories.join(', ') : (genre || '');
     const finalStatus = (status || 'DRAFT').toUpperCase() as any;
-    const finalCoverImageUrl = await ImageService.processImage(coverImageUrl || cover_image || '');
+    const finalCoverImageUrl = await ImageService.processImage(coverImageUrl || cover_image || coverImage || '');
 
     const novel = await prisma.novel.create({
       data: {
@@ -249,13 +249,13 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
 export const updateNovel = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
-    const { title, description, novel_summary, genre, categories, status, cover_image, coverImageUrl } = req.body;
+    const { title, description, novel_summary, genre, categories, status, cover_image, coverImageUrl, coverImage } = req.body;
 
     // Map frontend fields to backend schema
     const finalDescription = description || novel_summary;
     const finalGenre = Array.isArray(categories) ? categories.join(', ') : genre;
     const finalStatus = status ? status.toUpperCase() : undefined;
-    const finalCoverImageUrl = await ImageService.processImage(coverImageUrl || cover_image);
+    const finalCoverImageUrl = await ImageService.processImage(coverImageUrl || cover_image || coverImage);
 
     const data: any = {};
     if (title) data.title = title;
