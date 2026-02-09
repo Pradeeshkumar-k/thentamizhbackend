@@ -301,7 +301,7 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
       title, 
       description, novel_summary, 
       genre, categories, 
-      coverImageUrl, cover_image, 
+      coverImageUrl, cover_image, coverImage,
       status, 
       title_en, titleEn,
       summary_en, descriptionEn
@@ -321,7 +321,7 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
     }
     
     // Process Image
-    const rawCoverImage = coverImageUrl || cover_image || '';
+    const rawCoverImage = coverImageUrl || cover_image || coverImage || '';
     const dbCoverImage = await ImageService.processImage(rawCoverImage);
 
     let dbStatus = status ? status.toUpperCase() : 'DRAFT'; 
@@ -354,7 +354,7 @@ export const updateNovel = async (req: Request, res: Response) => {
       title, 
       description, novel_summary, 
       genre, categories, 
-      coverImageUrl, cover_image, 
+      coverImageUrl, cover_image, coverImage,
       status, 
       title_en, titleEn,
       summary_en, descriptionEn
@@ -375,8 +375,8 @@ export const updateNovel = async (req: Request, res: Response) => {
     else if (categories) dbData.genre = String(categories);
     
     // Process Image if provided
-    if (coverImageUrl || cover_image) {
-        const rawCoverImage = coverImageUrl || cover_image;
+    if (coverImageUrl || cover_image || coverImage) {
+        const rawCoverImage = coverImageUrl || cover_image || coverImage;
         dbData.coverImageUrl = await ImageService.processImage(rawCoverImage);
     }
     
