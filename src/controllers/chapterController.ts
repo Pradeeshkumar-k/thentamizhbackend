@@ -52,7 +52,9 @@ export const getChapterById = async (req: Request, res: Response) => {
           select: { likes: true, comments: true }
         },
         isTranslating: true,
-        views: true
+        views: true,
+        createdAt: true,
+        updatedAt: true
       }
     });
 

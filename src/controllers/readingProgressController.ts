@@ -93,6 +93,7 @@ export const getReadingProgress = async (req: AuthRequest, res: Response): Promi
           select: {
             id: true,
             title: true,
+            titleEn: true, 
             coverImageUrl: true,
             author: { select: { name: true } }
           }
@@ -105,6 +106,7 @@ export const getReadingProgress = async (req: AuthRequest, res: Response): Promi
       ongoing: allProgress.map(p => ({
         novelId: p.novelId,
         novelTitle: p.novel.title,
+        novelTitleEn: p.novel.titleEn || undefined,
         coverImage: p.novel.coverImageUrl,
         author: p.novel.author?.name || 'Unknown',
         lastChapter: p.chapterId,
