@@ -16,10 +16,24 @@ export const updateReadingProgress = async (req: AuthRequest, res: Response): Pr
     // Prioritize chapterId (UUID), fallback to lastChapter if it looks like a UUID (legacy support)
     // If lastChapter is a number (order), we can't use it directly for the relation without a lookup.
     // The frontend should now be sending UUIDs.
-    const activeChapterId = chapterId || (typeof lastChapter === 'string' && lastChapter.length > 10 ? lastChapter : undefined);
+    let activeChapterId = chapterId || (typeof lastChapter === 'string' && lastChapter.length > 10 ? lastChapter : undefined);
+
+    // 3. Fallback: If lastChapter is a NUMBER (e.g. 1 from startReading), find the chapter ID by order
+    if (!activeChapterId && typeof lastChapter === 'number') {
+       const chapterByOrder = await prisma.chapter.findFirst({
+         where: {
+           novelId,
+           order: lastChapter
+         },
+         select: { id: true }
+       });
+       if (chapterByOrder) {
+         activeChapterId = chapterByOrder.id;
+       }
+    }
 
     if (!novelId || !activeChapterId) {
-      res.status(400).json({ message: 'Novel ID and Chapter ID (UUID) are required' });
+      res.status(400).json({ message: 'Novel ID and Valid Chapter ID (UUID) or Chapter Order are required' });
       return;
     }
 
