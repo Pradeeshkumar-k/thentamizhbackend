@@ -7,13 +7,16 @@ import redis, { getRedisViewCount, getRedisViewCounts, incrementViewCount } from
 import { addTranslationJob } from '../utils/queue';
 import { decodeAccessToken } from '../utils/jwt';
 
-// Helper to get userId from optional Authorization header
-const getUserIdFromHeader = (authHeader?: string): string | null => {
+// Helper to get user info from optional Authorization header
+const getUserFromHeader = (authHeader?: string): { userId: string, role: string } | null => {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
   const token = authHeader.split(' ')[1];
   try {
     const payload = decodeAccessToken(token) as any;
-    return payload?.userId || payload?.id || null;
+    return {
+      userId: payload?.userId || payload?.id || '',
+      role: payload?.role || 'USER'
+    };
   } catch {
     return null;
   }
@@ -220,12 +223,13 @@ export const getNovelCover = async (req: Request, res: Response) => {
 export const getNovelById = async (req: Request, res: Response) => {
   const id = String(req.params.id);
   try {
-    const userId = getUserIdFromHeader(req.headers.authorization);
+    const user = getUserFromHeader(req.headers.authorization);
+    const userId = user?.userId;
+    const userRole = user?.role;
 
     const novel = await prisma.novel.findFirst({
       where: {
         id,
-        status: 'PUBLISHED', 
         // @ts-ignore
         deletedAt: null
       },
@@ -239,6 +243,7 @@ export const getNovelById = async (req: Request, res: Response) => {
         status: true,
         coverImageUrl: true,
         views: true,
+        authorId: true, // Need this for ownership check
         author: { select: { name: true } },
         _count: { select: { chapters: true, likes: true, bookmarks: true } },
         // Check if user has liked/bookmarked
@@ -249,6 +254,18 @@ export const getNovelById = async (req: Request, res: Response) => {
 
     if (!novel) {
       return res.status(404).json({ message: "Not found" });
+    }
+
+    // Access Control: If not Published, only allow Admin or Author
+    if (novel.status !== 'PUBLISHED') {
+        const isAdmin = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
+        const isAuthor = userId === novel.authorId;
+        
+        if (!isAdmin && !isAuthor) {
+            console.log(`[ACCESS DENIED] User ${userId} (Role: ${userRole}) tried to access draft novel ${id}`);
+            return res.status(404).json({ message: "Not found" });
+        }
+        console.log(`[ACCESS GRANTED] Authorized user ${userId} accessing draft/private novel ${id}`);
     }
 
     // Merge DB views + Redis views
@@ -439,7 +456,29 @@ export const getChaptersByNovel = async (req: Request, res: Response): Promise<v
         }
     }
 
-    // 2. DB Query
+    // 2. Fetch Novel Status for Access Control
+    const novel = await prisma.novel.findUnique({
+        where: { id },
+        select: { status: true, authorId: true }
+    });
+
+    if (!novel || (novel as any).deletedAt) {
+        res.status(404).json({ message: "Novel not found" });
+        return;
+    }
+
+    if (novel.status !== 'PUBLISHED') {
+        const user = getUserFromHeader(req.headers.authorization);
+        const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
+        const isAuthor = user?.userId === novel.authorId;
+
+        if (!isAdmin && !isAuthor) {
+            res.status(404).json({ message: "Not found" });
+            return;
+        }
+    }
+
+    // 3. DB Query
     const chapters = await prisma.chapter.findMany({
       where: { novelId: id },
       orderBy: { order: 'asc' },
