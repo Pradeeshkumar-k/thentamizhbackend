@@ -1,10 +1,6 @@
 import { TranslationService } from '../services/translationService';
 
-/**
- * Queue fallback for serverless/REST Redis
- * Since Upstash REST doesn't support BullMQ, we use a simple fire-and-forget 
- * until a worker/queue system is truly needed.
- */
+
 export const addTranslationJob = async (type: 'novel' | 'chapter', id: string) => {
   console.log(`[QUEUE] Fire-and-forget translation for ${type}: ${id}`);
   
