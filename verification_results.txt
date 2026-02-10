@@ -1,3 +1,0 @@
-Verifying admin changes...
-SUCCESS: Thenthuzhinovels@gmail.com is an ADMIN.
-SUCCESS: nivinivi344@gmail.Com is now a USER.
