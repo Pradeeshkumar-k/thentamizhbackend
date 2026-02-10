@@ -5,7 +5,7 @@ import { prisma } from '../utils/prisma';
 // Update Reading Progress
 export const updateReadingProgress = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { novelId, chapterId, lastChapter, progress, isCompleted } = req.body;
+    const { novelId, chapterId, lastChapter, progress } = req.body;
     const userId = req.user?.userId;
 
     if (!userId) {
@@ -13,11 +13,13 @@ export const updateReadingProgress = async (req: AuthRequest, res: Response): Pr
        return;
     }
 
-    // Support both chapterId and lastChapter (from frontend migration)
-    const activeChapterId = chapterId || lastChapter;
+    // Prioritize chapterId (UUID), fallback to lastChapter if it looks like a UUID (legacy support)
+    // If lastChapter is a number (order), we can't use it directly for the relation without a lookup.
+    // The frontend should now be sending UUIDs.
+    const activeChapterId = chapterId || (typeof lastChapter === 'string' && lastChapter.length > 10 ? lastChapter : undefined);
 
     if (!novelId || !activeChapterId) {
-      res.status(400).json({ message: 'Novel ID and Chapter ID are required' });
+      res.status(400).json({ message: 'Novel ID and Chapter ID (UUID) are required' });
       return;
     }
 
@@ -85,23 +87,34 @@ export const getReadingProgress = async (req: AuthRequest, res: Response): Promi
     }
 
     // If no novelId, return ALL progress for the user
-    // For now, let's just return all as "ongoing" or categorize them
     const allProgress = await prisma.readingProgress.findMany({
       where: { userId },
+      orderBy: { lastRead: 'desc' }, // Show most recently read first
+      take: 10, // Limit to top 10
       include: {
+        chapter: {
+          select: {
+            id: true,
+            order: true,
+            title: true
+          }
+        },
         novel: {
           select: {
             id: true,
             title: true,
             titleEn: true, 
             coverImageUrl: true,
-            author: { select: { name: true } }
+            author: { select: { name: true } },
+            _count: {
+              select: { chapters: true }
+            }
           }
         }
       }
     });
 
-    // Format for frontend ReadingProgressContext
+    // Format for frontend ReadingProgressContext & Dashboard
     const formattedProgress = {
       ongoing: allProgress.map(p => ({
         novelId: p.novelId,
@@ -109,10 +122,13 @@ export const getReadingProgress = async (req: AuthRequest, res: Response): Promi
         novelTitleEn: p.novel.titleEn || undefined,
         coverImage: p.novel.coverImageUrl,
         author: p.novel.author?.name || 'Unknown',
-        lastChapter: p.chapterId,
+        lastChapter: p.chapter?.order || 1, // Legacy support (Order)
+        lastChapterId: p.chapterId, // UUID for navigation
+        lastChapterOrder: p.chapter?.order || 1, // Int for progress bar
+        totalChapters: p.novel._count.chapters || 0,
         updatedAt: p.lastRead
       })),
-      completed: [] // We don't have a completion flag in DB yet, but could add it
+      completed: [] // TODO: Implement completion logic if needed using status or lastChapter === totalChapters
     };
 
     res.json({ success: true, data: formattedProgress });
