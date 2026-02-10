@@ -13,6 +13,12 @@ export const ImageService = {
       return base64String; // Return as-is if not a valid image data URI
     }
 
+    // Optimization: If image is already small (< 150KB approx), skip processing
+    // 150KB = ~200,000 chars in Base64
+    if (base64String.length < 200000) {
+        return base64String;
+    }
+
     try {
       // 1. Remove prefix to get buffer
       const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
