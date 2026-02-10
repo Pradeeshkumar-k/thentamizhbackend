@@ -5,50 +5,52 @@ const JimpMime = { jpeg: 'image/jpeg' }; // Jimp 1.x doesn't export JimpMime dir
 export const ImageService = {
   /**
    * Resizes and compresses a Base64 image string.
-   * Target: Max width 800px, JPEG quality 60.
-   * Returns a lightweight Base64 string (< 100KB).
+   * Target: Max width 400px (ideal for thumbnails), JPEG quality 60.
+   * Returns a lightweight Base64 string (< 50KB).
    */
   processImage: async (base64String: string): Promise<string> => {
     if (!base64String || !base64String.startsWith('data:image')) {
-      return base64String; // Return as-is if not a valid image data URI
+      return base64String;
     }
 
-    // Optimization: If image is already small (< 150KB approx), skip processing
-    // 150KB = ~200,000 chars in Base64
-    if (base64String.length < 200000) {
+    // Optimization: If image is already small (< 50KB approx), skip processing
+    // 50KB = ~68,000 chars in Base64
+    if (base64String.length < 70000) {
         return base64String;
     }
 
     try {
-      // 1. Remove prefix to get buffer
       const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
       if (!matches || matches.length !== 3) {
         return base64String;
       }
       
       const buffer = Buffer.from(matches[2], 'base64');
+      const image = await Jimp.read(buffer as any);
 
-      // 2. Read with Jimp
-      const image = await Jimp.read(buffer);
-
-      // 3. Resize if too big (Max width 800px)
-      if (image.width > 800) {
-        image.resize({ w: 800 }); 
+      // 3. Resize if too big (Max width 400px for covers/thumbnails)
+      if (image.width > 400) {
+        image.resize({ w: 400 }); 
       }
 
-      // 4. Convert back to Base64 (JPEG)
-      const imgAny = image as any;
-      const optimizedBuffer = imgAny.getBufferAsync ? await imgAny.getBufferAsync('image/jpeg') : await new Promise((resolve, reject) => {
-        imgAny.getBuffer('image/jpeg', (err: any, buffer: any) => {
-          if (err) reject(err);
-          else resolve(buffer);
-        });
+      // 4. Set Quality to 60 (Requires any cast for Jimp 1.6 types)
+      if ((image as any).quality) {
+        (image as any).quality(60);
+      }
+
+      // 4. Convert back to Base64 (WebP)
+    const imgAny = image as any;
+    const optimizedBuffer = imgAny.getBufferAsync ? await imgAny.getBufferAsync('image/webp') : await new Promise((resolve, reject) => {
+      imgAny.getBuffer('image/webp', (err: any, buffer: any) => {
+        if (err) reject(err);
+        else resolve(buffer);
       });
-      return `data:image/jpeg;base64,${(optimizedBuffer as Buffer).toString('base64')}`;
+    });
+    return `data:image/webp;base64,${(optimizedBuffer as Buffer).toString('base64')}`;
 
     } catch (error) {
       console.error('[ImageService] Compression failed:', error);
-      return base64String; // Fallback to original if failure
+      return base64String;
     }
   }
 };
