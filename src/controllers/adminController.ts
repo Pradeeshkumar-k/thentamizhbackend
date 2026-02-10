@@ -13,12 +13,15 @@ import { invalidateNovelCache, invalidateChapterCache } from './novelController'
 
 export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const isSuperAdmin = req.user?.role === 'SUPER_ADMIN';
+    const whereCondition = isSuperAdmin ? {} : { createdById: req.user?.userId };
+
     const [totalNovels, totalChapters, totalUsers, totalComments, totalSubscriptions] = await Promise.all([
-      prisma.novel.count({ where: { status: { not: 'DELETED' } } }),
-      prisma.chapter.count({ where: { novel: { status: { not: 'DELETED' } } } }),
-      prisma.user.count(), // Users are rarely "deleted", usually banned or keep account
-      prisma.comment.count({ where: { chapter: { novel: { status: { not: 'DELETED' } } } } }),
-      prisma.bookmark.count({ where: { novel: { status: { not: 'DELETED' } } } })
+      prisma.novel.count({ where: { status: { not: 'DELETED' }, ...whereCondition } }),
+      prisma.chapter.count({ where: { novel: { status: { not: 'DELETED' }, ...whereCondition } } }),
+      prisma.user.count(), 
+      prisma.comment.count({ where: { chapter: { novel: { status: { not: 'DELETED' }, ...whereCondition } } } }),
+      prisma.bookmark.count({ where: { novel: { status: { not: 'DELETED' }, ...whereCondition } } })
     ]);
 
     // Get recent activity (Hybrid: Try ActivityLog, fallback to Novel)
@@ -94,6 +97,11 @@ export const getAllNovelsAdmin = async (req: AuthRequest, res: Response): Promis
     } else {
       // Default: Exclude DELETED novels from list
       where.status = { not: 'DELETED' };
+    }
+
+    // Ownership Filter
+    if (req.user?.role !== 'SUPER_ADMIN') {
+        where.createdById = req.user?.userId;
     }
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -221,7 +229,8 @@ export const createNovel = async (req: AuthRequest, res: Response): Promise<void
         genre: finalGenre,
         status: finalStatus,
         coverImageUrl: finalCoverImageUrl,
-        authorId
+        authorId,
+        createdById: req.user?.userId
       },
       include: { author: { select: { name: true } } }
     });
@@ -308,12 +317,26 @@ export const updateNovel = async (req: AuthRequest, res: Response): Promise<void
 };
 
 
-export const deleteNovel = async (req: Request, res: Response) => {
+export const deleteNovel = async (req: AuthRequest, res: Response) => {
   try {
+    const id = String(req.params.id);
+    const existing = await prisma.novel.findUnique({ where: { id } });
+    
+    if (!existing) {
+        res.status(404).json({ message: 'Novel not found' });
+        return;
+    }
+
+    // Ownership Check
+    if (req.user?.role !== 'SUPER_ADMIN' && existing.createdById !== req.user?.userId) {
+        res.status(403).json({ message: 'You do not have permission to delete this novel' });
+        return;
+    }
+
     await prisma.novel.update({
-      where: { id: String(req.params.id) },
+      where: { id },
       data: {
-        status: 'DELETED' as any,
+        status: 'DELETED',
         // @ts-ignore
         deletedAt: new Date()
       }
@@ -419,7 +442,8 @@ export const createChapter = async (req: AuthRequest, res: Response): Promise<vo
         contentEn: (req.body.contentEn || req.body.content_en || undefined), // Add English content
         order: finalOrder,
         thumbnailUrl: finalThumbnailUrl,
-        isTranslating: !!(req.body.contentEn || req.body.content_en) ? false : undefined
+        isTranslating: !!(req.body.contentEn || req.body.content_en) ? false : undefined,
+        createdById: req.user?.userId
       }
     });
 
@@ -452,6 +476,18 @@ export const updateChapter = async (req: AuthRequest, res: Response): Promise<vo
     const finalOrder = order !== undefined ? order : (chapter_number !== undefined ? chapter_number : undefined);
     const finalThumbnailUrl = await ImageService.processImage(thumbnailUrl || thumbnail);
     const finalTitle = title || name;
+
+    const existing = await prisma.chapter.findUnique({ where: { id } });
+    if (!existing) {
+        res.status(404).json({ message: 'Chapter not found' });
+        return;
+    }
+
+    // Ownership Check
+    if (req.user?.role !== 'SUPER_ADMIN' && existing.createdById !== req.user?.userId) {
+        res.status(403).json({ message: 'You do not have permission to edit this chapter' });
+        return;
+    }
 
     const finalTitleEn = req.body.titleEn || req.body.title_en;
     const finalContentEn = req.body.contentEn || req.body.content_en;
@@ -495,6 +531,12 @@ export const deleteChapter = async (req: AuthRequest, res: Response): Promise<vo
     if (!existing) {
       res.status(404).json({ message: 'Chapter not found' });
       return;
+    }
+
+    // Ownership Check
+    if (req.user?.role !== 'SUPER_ADMIN' && existing.createdById !== req.user?.userId) {
+        res.status(403).json({ message: 'You do not have permission to delete this chapter' });
+        return;
     }
 
     // Transaction (Atomic Delete)

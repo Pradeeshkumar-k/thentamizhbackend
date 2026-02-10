@@ -29,9 +29,20 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
   }
 };
 
-export const authorizeRole = (role: 'ADMIN' | 'USER') => {
+export const authorizeRole = (role: 'ADMIN' | 'USER' | 'SUPER_ADMIN') => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => { // Return void
-    if (!req.user || req.user.role !== role) {
+    if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
+
+    // SUPER_ADMIN has access to everything ADMIN has
+    if (req.user.role === 'SUPER_ADMIN') {
+        next();
+        return;
+    }
+
+    if (req.user.role !== role) {
       res.status(403).json({ message: 'Forbidden' });
       return; // Ensure function execution stops
     }

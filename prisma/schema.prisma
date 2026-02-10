@@ -23,6 +23,10 @@ model User {
   novels          Novel[]
   novelLikes      NovelLike[]
   readingProgress ReadingProgress[]
+
+  // Admin Ownership
+  createdNovels   Novel[]           @relation("NovelCreator")
+  createdChapters Chapter[]         @relation("ChapterCreator")
 }
 
 /* ===================== NOVEL ===================== */
@@ -41,6 +45,10 @@ model Novel {
   authorId          String
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
+  
+  // Ownership
+  createdById       String?
+  createdBy         User?             @relation("NovelCreator", fields: [createdById], references: [id])
 
   author            User              @relation(fields: [authorId], references: [id])
   chapters          Chapter[]
@@ -49,6 +57,7 @@ model Novel {
   readingProgresses ReadingProgress[]
 
   @@index([authorId])
+  @@index([createdById])
   @@index([createdAt])
   @@index([status, deletedAt, createdAt])
 }
@@ -68,6 +77,10 @@ model Chapter {
   isTranslating Boolean       @default(false)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+
+  // Ownership
+  createdById   String?
+  createdBy     User?         @relation("ChapterCreator", fields: [createdById], references: [id])
 
   novel             Novel        @relation(fields: [novelId], references: [id], onDelete: Cascade)
   comments          Comment[]
@@ -173,6 +186,7 @@ model ChapterView {
 enum Role {
   USER
   ADMIN
+  SUPER_ADMIN
 }
 
 enum NovelStatus {
