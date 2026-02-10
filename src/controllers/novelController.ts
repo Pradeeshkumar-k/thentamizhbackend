@@ -100,6 +100,7 @@ export const getNovels = async (req: Request, res: Response) => {
       select: {
         id: true,
         title: true,
+        titleEn: true, // Fetch English title
         coverImageUrl: true, // Only need coverImageUrl, not titleEn or status for list
         views: true,
         createdAt: true,
@@ -133,6 +134,7 @@ export const getNovels = async (req: Request, res: Response) => {
       return {
         id: n.id,
         title: n.title,
+        titleEn: n.titleEn, // Added for localization
         coverImage: coverImage,
         views: (n.views || 0) + (redisViews[n.id] || 0), // Merge DB + Redis
         createdAt: n.createdAt,
