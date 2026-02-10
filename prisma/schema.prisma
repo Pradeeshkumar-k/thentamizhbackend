@@ -5,7 +5,7 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  // directUrl = env("DIRECT_URL")
+  // directUrl = env("DIRECT_URL")  // Re-enable when credentials are updated
 }
 
 model User {
@@ -132,6 +132,7 @@ model Bookmark {
 
   @@unique([userId, novelId])
   @@index([novelId])
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 /* ===================== NOVEL LIKE ===================== */
@@ -164,6 +165,7 @@ model ReadingProgress {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, novelId])
+  @@index([userId, lastRead(sort: Desc)])
 }
 
 /* ===================== CHAPTER VIEW ===================== */
