@@ -159,6 +159,9 @@ export const updateChapter = async (req: Request, res: Response) => {
       data: { updatedAt: new Date() }
     });
 
+    // Invalidate novel list cache
+    await invalidateNovelCache();
+
     res.json(chapter);
   } catch (error) {
     console.error("UPDATE CHAPTER ERROR:", error);
