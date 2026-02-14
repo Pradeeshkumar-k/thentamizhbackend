@@ -21,7 +21,18 @@ app.use(compression());
 
 app.use(cors({
   origin: (origin, callback) => {
-    const allowedOrigins = ['https://thentamizhnovel.vercel.app', 'https://thentamizhamuthunovels.com', 'http://localhost:5173', 'http://localhost:3000'];
+    const envOrigins = process.env.CORS_ALLOWED_ORIGINS 
+      ? process.env.CORS_ALLOWED_ORIGINS.split(',').map(o => o.trim()) 
+      : [];
+    
+    const allowedOrigins = [
+      'https://thentamizhnovel.vercel.app', 
+      'https://thentamizhamuthunovels.com',
+      'https://www.thentamizhamuthunovels.com',
+      'http://localhost:5173', 
+      'http://localhost:3000',
+      ...envOrigins
+    ];
     
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
