@@ -110,7 +110,7 @@ export const getNovels = async (req: Request, res: Response) => {
         author: { select: { name: true } },
         _count: { select: { chapters: true } },
         chapters: {
-          orderBy: { order: 'desc' },
+          orderBy: { updatedAt: 'desc' },
           take: 1,
           select: {
             id: true,
