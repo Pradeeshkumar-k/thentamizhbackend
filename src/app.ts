@@ -29,6 +29,8 @@ app.use(cors({
       'https://thentamizhnovel.vercel.app', 
       'https://thentamizhamuthunovels.com',
       'https://www.thentamizhamuthunovels.com',
+      'https://thentamilzhamuthunovels.com',
+      'https://www.thentamilzhamuthunovels.com',
       'http://localhost:5173', 
       'http://localhost:3000',
       ...envOrigins
