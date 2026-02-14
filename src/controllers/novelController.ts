@@ -99,7 +99,7 @@ export const getNovels = async (req: Request, res: Response) => {
       take: limit,
       ...(cursor && { cursor: { id: cursor }, skip: 1 }),
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
         title: true,
@@ -108,7 +108,17 @@ export const getNovels = async (req: Request, res: Response) => {
         views: true,
         createdAt: true,
         author: { select: { name: true } },
-        _count: { select: { chapters: true } } // Removed likes/bookmarks counts for speed
+        _count: { select: { chapters: true } },
+        chapters: {
+          orderBy: { order: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            title: true,
+            titleEn: true,
+            order: true
+          }
+        }
       },
     });
     console.timeEnd('DB Query');
@@ -142,7 +152,13 @@ export const getNovels = async (req: Request, res: Response) => {
         views: (n.views || 0) + (redisViews[n.id] || 0), // Merge DB + Redis
         createdAt: n.createdAt,
         authorName: n.author?.name ?? 'Unknown',
-        totalChapters: n._count?.chapters || 0
+        totalChapters: n._count?.chapters || 0,
+        latestChapter: n.chapters?.[0] ? {
+          id: n.chapters[0].id,
+          title: n.chapters[0].title,
+          titleEn: n.chapters[0].titleEn,
+          order: n.chapters[0].order
+        } : null
       };
     });
 

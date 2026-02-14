@@ -107,6 +107,13 @@ export const createChapter = async (req: Request, res: Response): Promise<void> 
         isTranslating: !!finalContentEn ? false : undefined // If contentEn provided, not translating
       },
     });
+
+    // Bump Novel updatedAt
+    await prisma.novel.update({
+      where: { id: novelId },
+      data: { updatedAt: new Date() }
+    });
+
     // Invalidate cache to update chapter count on novel list
     await invalidateNovelCache();
     res.status(201).json(chapter);
@@ -145,6 +152,13 @@ export const updateChapter = async (req: Request, res: Response) => {
         isTranslating: !!finalContentEn ? false : undefined // Force false if content provided
       },
     });
+
+    // Bump Novel updatedAt
+    await prisma.novel.update({
+      where: { id: chapter.novelId },
+      data: { updatedAt: new Date() }
+    });
+
     res.json(chapter);
   } catch (error) {
     console.error("UPDATE CHAPTER ERROR:", error);
@@ -167,6 +181,12 @@ export const deleteChapter = async (req: Request, res: Response) => {
         await tx.like.deleteMany({ where: { chapterId: id } });
         await tx.readingProgress.deleteMany({ where: { chapterId: id } });
         await tx.chapter.delete({ where: { id } });
+        
+        // Bump Novel updatedAt
+        await tx.novel.update({
+          where: { id: existing.novelId },
+          data: { updatedAt: new Date() }
+        });
     });
 
     await invalidateNovelCache();
