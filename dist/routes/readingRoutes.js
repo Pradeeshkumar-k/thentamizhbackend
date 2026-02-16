@@ -9,4 +9,5 @@ const readingProgressController_1 = require("../controllers/readingProgressContr
 const router = express_1.default.Router();
 router.post('/progress', authMiddleware_1.authenticate, readingProgressController_1.updateReadingProgress);
 router.get('/progress', authMiddleware_1.authenticate, readingProgressController_1.getReadingProgress);
+router.delete('/progress/:novelId', authMiddleware_1.authenticate, readingProgressController_1.deleteReadingProgress);
 exports.default = router;

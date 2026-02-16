@@ -22,7 +22,16 @@ const authenticate = (req, res, next) => {
 exports.authenticate = authenticate;
 const authorizeRole = (role) => {
     return (req, res, next) => {
-        if (!req.user || req.user.role !== role) {
+        if (!req.user) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return;
+        }
+        // SUPER_ADMIN has access to everything ADMIN has
+        if (req.user.role === 'SUPER_ADMIN') {
+            next();
+            return;
+        }
+        if (req.user.role !== role) {
             res.status(403).json({ message: 'Forbidden' });
             return; // Ensure function execution stops
         }

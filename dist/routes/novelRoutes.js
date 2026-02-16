@@ -18,6 +18,7 @@ router.delete('/bookmark', authMiddleware_1.authenticate, interactionController_
 router.get('/bookmarks', authMiddleware_1.authenticate, interactionController_1.getBookmarkedNovels);
 router.get('/', novelController_1.getNovels);
 router.get('/:id', novelController_1.getNovelById);
+router.get('/:id/cover', novelController_1.getNovelCover);
 router.post('/:id/view', novelController_1.incrementNovelView);
 router.get('/:id/chapters', novelController_1.getChaptersByNovel);
 // Frontend compatibility route

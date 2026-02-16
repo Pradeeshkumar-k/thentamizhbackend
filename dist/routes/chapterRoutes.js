@@ -12,5 +12,7 @@ const router = express_1.default.Router();
 router.post('/:id/view', chapterController_1.incrementChapterView);
 router.get('/:id', chapterController_1.getChapterById);
 router.get('/:id/comments', commentController_1.getCommentsByChapter);
+router.post('/:id/like', authMiddleware_1.authenticate, chapterController_1.likeChapter);
+router.delete('/:id/like', authMiddleware_1.authenticate, chapterController_1.unlikeChapter);
 router.post('/', authMiddleware_1.authenticate, (0, authMiddleware_1.authorizeRole)('ADMIN'), chapterController_1.createChapter);
 exports.default = router;

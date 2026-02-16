@@ -2,8 +2,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.incrementChapterView = exports.unlikeChapter = exports.likeChapter = exports.deleteChapter = exports.updateChapter = exports.createChapter = exports.getChapterById = void 0;
 const prisma_1 = require("../utils/prisma");
-const queue_1 = require("../utils/queue");
 const jwt_1 = require("../utils/jwt");
+const redis_1 = require("../utils/redis");
+const novelController_1 = require("./novelController");
+const queue_1 = require("../utils/queue");
 // Public: Get chapter content
 // 🚀 FAST & SAFE - READ ONLY
 const getChapterById = async (req, res) => {
@@ -45,7 +47,10 @@ const getChapterById = async (req, res) => {
                 _count: {
                     select: { likes: true, comments: true }
                 },
-                views: true
+                isTranslating: true,
+                views: true,
+                createdAt: true,
+                updatedAt: true
             }
         });
         if (!chapter) {
@@ -57,9 +62,10 @@ const getChapterById = async (req, res) => {
             // Trigger background translation job
             (0, queue_1.addTranslationJob)('chapter', chapterId);
         }
+        const redisCount = await (0, redis_1.getRedisViewCount)('chapter', chapterId);
         res.json({
             ...chapter,
-            views: chapter.views || 0,
+            views: (chapter.views || 0) + redisCount,
             chapterNumber: chapter.order,
             likeCount: chapter._count?.likes ?? 0,
             likedByMe: userId
@@ -75,20 +81,33 @@ const getChapterById = async (req, res) => {
 exports.getChapterById = getChapterById;
 // Admin: Create chapter
 const createChapter = async (req, res) => {
-    const { novelId, title, content, order, thumbnailUrl } = req.body;
+    const { novelId, title, titleEn, title_en, content, contentEn, content_en, order, thumbnailUrl } = req.body;
+    const finalTitleEn = titleEn || title_en;
+    const finalContentEn = contentEn || content_en;
     try {
         const chapter = await prisma_1.prisma.chapter.create({
             data: {
                 novelId,
                 title,
+                titleEn: finalTitleEn,
                 content,
+                contentEn: finalContentEn,
                 order,
-                thumbnailUrl
+                thumbnailUrl,
+                isTranslating: !!finalContentEn ? false : undefined // If contentEn provided, not translating
             },
         });
+        // Bump Novel updatedAt
+        await prisma_1.prisma.novel.update({
+            where: { id: novelId },
+            data: { updatedAt: new Date() }
+        });
+        // Invalidate cache to update chapter count on novel list
+        await (0, novelController_1.invalidateNovelCache)();
         res.status(201).json(chapter);
     }
     catch (error) {
+        console.error("CREATE CHAPTER ERROR:", error);
         res.status(500).json({ message: 'Error creating chapter', error: error.message });
     }
 };
@@ -96,7 +115,10 @@ exports.createChapter = createChapter;
 // Admin: Update chapter
 const updateChapter = async (req, res) => {
     const { id } = req.params;
-    const { title, content, order, thumbnailUrl } = req.body;
+    const { title, titleEn, title_en, content, contentEn, content_en, order, thumbnailUrl } = req.body;
+    const finalTitleEn = titleEn || title_en;
+    const finalContentEn = contentEn || content_en;
+    console.log(`[UPDATE CHAPTER] ID: ${id}, TitleEn: ${finalTitleEn ? 'YES' : 'NO'}, ContentEn: ${finalContentEn ? 'YES' : 'NO'}`);
     try {
         const existing = await prisma_1.prisma.chapter.findUnique({ where: { id } });
         if (!existing) {
@@ -105,11 +127,27 @@ const updateChapter = async (req, res) => {
         }
         const chapter = await prisma_1.prisma.chapter.update({
             where: { id },
-            data: { title, content, order, thumbnailUrl },
+            data: {
+                title,
+                titleEn: finalTitleEn,
+                content,
+                contentEn: finalContentEn,
+                order,
+                thumbnailUrl,
+                isTranslating: !!finalContentEn ? false : undefined // Force false if content provided
+            },
         });
+        // Bump Novel updatedAt
+        await prisma_1.prisma.novel.update({
+            where: { id: chapter.novelId },
+            data: { updatedAt: new Date() }
+        });
+        // Invalidate novel list cache
+        await (0, novelController_1.invalidateNovelCache)();
         res.json(chapter);
     }
     catch (error) {
+        console.error("UPDATE CHAPTER ERROR:", error);
         res.status(500).json({ message: 'Error updating chapter', error: error.message });
     }
 };
@@ -128,7 +166,13 @@ const deleteChapter = async (req, res) => {
             await tx.like.deleteMany({ where: { chapterId: id } });
             await tx.readingProgress.deleteMany({ where: { chapterId: id } });
             await tx.chapter.delete({ where: { id } });
+            // Bump Novel updatedAt
+            await tx.novel.update({
+                where: { id: existing.novelId },
+                data: { updatedAt: new Date() }
+            });
         });
+        await (0, novelController_1.invalidateNovelCache)();
         res.json({ message: 'Chapter deleted successfully' });
     }
     catch (error) {
@@ -185,7 +229,7 @@ const unlikeChapter = async (req, res) => {
     }
 };
 exports.unlikeChapter = unlikeChapter;
-// Public: Increment view count for chapter (REAL-TIME FIX)
+// Public: Increment view count for chapter (BUFFERED via Redis)
 const incrementChapterView = async (req, res) => {
     const chapterId = String(req.params.id);
     const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
@@ -201,7 +245,8 @@ const incrementChapterView = async (req, res) => {
         catch { }
     }
     try {
-        // 1️⃣ Dedup (24h)
+        // 1️⃣ Dedup (24h) via DB (Read-only check, acceptable)
+        // Optimization: Could move dedup to Redis too, but keeping DB for persistent history log logic
         const exists = await prisma_1.prisma.chapterView.findFirst({
             where: {
                 chapterId,
@@ -215,12 +260,10 @@ const incrementChapterView = async (req, res) => {
             }
         });
         if (!exists) {
-            // Direct DB increment
-            await prisma_1.prisma.chapter.update({
-                where: { id: chapterId },
-                data: { views: { increment: 1 } },
-            });
-            // 3️⃣ Fire-and-forget history log
+            // 2️⃣ Increment in Redis (No DB Lock)
+            await (0, redis_1.incrementViewCount)('chapter', chapterId);
+            // 3️⃣ Fire-and-forget history log (Insert is faster than Update, but still hits DB)
+            // Ideally this should also be buffered or queued.
             prisma_1.prisma.chapterView.create({
                 data: { chapterId, userId, ip }
             }).catch(console.error);

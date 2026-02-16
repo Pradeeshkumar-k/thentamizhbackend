@@ -154,3 +154,39 @@ export const getReadingProgress = async (req: AuthRequest, res: Response): Promi
     res.status(500).json({ success: false, message: 'Error fetching reading progress', error });
   }
 };
+
+// Delete Reading Progress
+export const deleteReadingProgress = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { novelId } = req.params as { novelId: string };
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    if (!novelId) {
+       res.status(400).json({ message: 'Novel ID is required' });
+       return;
+    }
+
+    await prisma.readingProgress.delete({
+      where: {
+        userId_novelId: {
+          userId,
+          novelId
+        }
+      }
+    });
+
+    res.json({ success: true, message: 'Reading progress deleted' });
+  } catch (error) {
+    console.error('deleteReadingProgress error:', error);
+    if ((error as any).code === 'P2025') {
+        res.status(404).json({ success: false, message: 'Reading progress not found' });
+        return;
+    }
+    res.status(500).json({ success: false, message: 'Error deleting reading progress', error });
+  }
+};

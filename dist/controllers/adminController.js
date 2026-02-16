@@ -1,40 +1,57 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.forceDeleteDebug = exports.listAllDebug = exports.translateContent = exports.markAllNotificationsAsRead = exports.markNotificationAsRead = exports.getAllNotifications = exports.deleteChapter = exports.updateChapter = exports.createChapter = exports.getChapterById = exports.getChaptersByNovel = exports.deleteNovel = exports.updateNovel = exports.createNovel = exports.getNovelByIdAdmin = exports.getAllNovelsAdmin = exports.getDashboardStats = void 0;
+exports.deleteActivityLog = exports.translateContent = exports.markAllNotificationsAsRead = exports.markNotificationAsRead = exports.getAllNotifications = exports.deleteChapter = exports.updateChapter = exports.createChapter = exports.getChapterById = exports.getChaptersByNovel = exports.deleteNovel = exports.updateNovel = exports.createNovel = exports.getNovelByIdAdmin = exports.getAllNovelsAdmin = exports.getDashboardStats = void 0;
 const prisma_1 = require("../utils/prisma");
 const translationService_1 = require("../services/translationService");
-// Import Cache Invalidation
+const imageService_1 = require("../services/imageService");
 const novelController_1 = require("./novelController");
 // ============================================
 // DASHBOARD STATS
 // ============================================
 const getDashboardStats = async (req, res) => {
     try {
+        const isSuperAdmin = req.user?.role === 'SUPER_ADMIN';
+        const whereCondition = isSuperAdmin ? {} : { createdById: req.user?.userId };
         const [totalNovels, totalChapters, totalUsers, totalComments, totalSubscriptions] = await Promise.all([
-            prisma_1.prisma.novel.count(),
-            prisma_1.prisma.chapter.count(),
+            prisma_1.prisma.novel.count({ where: { status: { not: 'DELETED' }, ...whereCondition } }),
+            prisma_1.prisma.chapter.count({ where: { novel: { status: { not: 'DELETED' }, ...whereCondition } } }),
             prisma_1.prisma.user.count(),
-            prisma_1.prisma.comment.count(),
-            prisma_1.prisma.bookmark.count()
+            prisma_1.prisma.comment.count({ where: { chapter: { novel: { status: { not: 'DELETED' }, ...whereCondition } } } }),
+            prisma_1.prisma.bookmark.count({ where: { novel: { status: { not: 'DELETED' }, ...whereCondition } } })
         ]);
-        // Get recent activity (last 10 novels)
-        const recentNovels = await prisma_1.prisma.novel.findMany({
-            take: 10,
-            orderBy: { createdAt: 'desc' },
-            select: {
-                id: true,
-                title: true,
-                createdAt: true,
-                author: {
-                    select: { name: true }
+        // Get recent activity (Hybrid: Try ActivityLog, fallback to Novel)
+        let recentActivity = [];
+        try {
+            const recentActivityLogs = await prisma_1.prisma.activityLog.findMany({
+                take: 10,
+                orderBy: { timestamp: 'desc' }
+            });
+            recentActivity = recentActivityLogs.map((log) => ({
+                id: log.id,
+                // If ID matches a UUID pattern, allow deleting. If it's from fallback, it might differ.
+                action: log.action,
+                timestamp: log.timestamp.toISOString()
+            }));
+        }
+        catch (err) {
+            console.warn("[Dashboard] ActivityLog table mismatch or missing. Falling back to Novels.", err);
+            // Fallback: Get recent novels
+            const recentNovels = await prisma_1.prisma.novel.findMany({
+                take: 10,
+                orderBy: { createdAt: 'desc' },
+                select: {
+                    id: true,
+                    title: true,
+                    createdAt: true,
+                    author: { select: { name: true } }
                 }
-            }
-        });
-        const recentActivity = recentNovels.map((novel) => ({
-            id: novel.id,
-            action: `New novel "${novel.title}" by ${novel.author.name}`,
-            timestamp: novel.createdAt.toISOString()
-        }));
+            });
+            recentActivity = recentNovels.map((novel) => ({
+                id: novel.id,
+                action: `New novel "${novel.title}" by ${novel.author?.name || 'Unknown'}`,
+                timestamp: novel.createdAt.toISOString()
+            }));
+        }
         res.json({
             success: true,
             data: {
@@ -72,6 +89,10 @@ const getAllNovelsAdmin = async (req, res) => {
             // Default: Exclude DELETED novels from list
             where.status = { not: 'DELETED' };
         }
+        // Ownership Filter
+        if (req.user?.role !== 'SUPER_ADMIN') {
+            where.createdById = req.user?.userId;
+        }
         const skip = (Number(page) - 1) * Number(limit);
         const [novels, total] = await Promise.all([
             prisma_1.prisma.novel.findMany({
@@ -84,6 +105,7 @@ const getAllNovelsAdmin = async (req, res) => {
                     description: true,
                     genre: true,
                     status: true,
+                    coverImageUrl: true, // Needed for list view
                     createdAt: true,
                     updatedAt: true,
                     author: {
@@ -104,7 +126,7 @@ const getAllNovelsAdmin = async (req, res) => {
             description: novel.description,
             genre: novel.genre,
             status: novel.status,
-            // cover_image excluded for list view performance
+            cover_image: novel.coverImageUrl, // Included for Admin Display
             total_chapters: novel._count.chapters,
             created_at: novel.createdAt,
             updated_at: novel.updatedAt
@@ -165,7 +187,7 @@ const getNovelByIdAdmin = async (req, res) => {
 exports.getNovelByIdAdmin = getNovelByIdAdmin;
 const createNovel = async (req, res) => {
     try {
-        const { title, description, novel_summary, genre, categories, status, cover_image, coverImageUrl } = req.body;
+        const { title, description, novel_summary, genre, categories, status, cover_image, coverImageUrl, coverImage } = req.body;
         const authorId = req.user?.userId;
         if (!authorId) {
             res.status(401).json({ message: 'Unauthorized' });
@@ -175,7 +197,12 @@ const createNovel = async (req, res) => {
         const finalDescription = description || novel_summary || '';
         const finalGenre = Array.isArray(categories) ? categories.join(', ') : (genre || '');
         const finalStatus = (status || 'DRAFT').toUpperCase();
-        const finalCoverImageUrl = coverImageUrl || cover_image || '';
+        console.time('CreateNovel-Total');
+        // Process Image
+        console.time('CreateNovel-ImageProcessing');
+        const finalCoverImageUrl = await imageService_1.ImageService.processImage(coverImageUrl || cover_image || coverImage || '');
+        console.timeEnd('CreateNovel-ImageProcessing');
+        console.time('CreateNovel-DB-Create');
         const novel = await prisma_1.prisma.novel.create({
             data: {
                 title,
@@ -183,11 +210,31 @@ const createNovel = async (req, res) => {
                 genre: finalGenre,
                 status: finalStatus,
                 coverImageUrl: finalCoverImageUrl,
-                authorId
-            }
+                authorId,
+                createdById: req.user?.userId
+            },
+            include: { author: { select: { name: true } } }
         });
+        console.timeEnd('CreateNovel-DB-Create');
+        // Create Activity Log (Safely)
+        try {
+            console.time('CreateNovel-ActivityLog');
+            await prisma_1.prisma.activityLog.create({
+                data: {
+                    action: `New novel "${novel.title}" by ${novel.author.name}`,
+                    timestamp: new Date()
+                }
+            });
+            console.timeEnd('CreateNovel-ActivityLog');
+        }
+        catch (logError) {
+            console.warn('Failed to create activity log (non-fatal):', logError);
+        }
         // Invalidate Cache
-        (0, novelController_1.invalidateNovelCache)();
+        console.time('CreateNovel-CacheInvalidation');
+        await (0, novelController_1.invalidateNovelCache)();
+        console.timeEnd('CreateNovel-CacheInvalidation');
+        console.timeEnd('CreateNovel-Total');
         res.status(201).json({
             success: true,
             data: novel,
@@ -203,12 +250,12 @@ exports.createNovel = createNovel;
 const updateNovel = async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, novel_summary, genre, categories, status, cover_image, coverImageUrl } = req.body;
+        const { title, description, novel_summary, genre, categories, status, cover_image, coverImageUrl, coverImage } = req.body;
         // Map frontend fields to backend schema
         const finalDescription = description || novel_summary;
         const finalGenre = Array.isArray(categories) ? categories.join(', ') : genre;
         const finalStatus = status ? status.toUpperCase() : undefined;
-        const finalCoverImageUrl = coverImageUrl || cover_image;
+        const finalCoverImageUrl = await imageService_1.ImageService.processImage(coverImageUrl || cover_image || coverImage);
         const data = {};
         if (title)
             data.title = title;
@@ -231,9 +278,11 @@ const updateNovel = async (req, res) => {
                 data: { thumbnailUrl: finalCoverImageUrl }
             });
             console.log(`Updated cover image for all chapters of novel ${id}`);
+            await (0, novelController_1.invalidateChapterCache)(id); // Chapters changed
         }
         // Invalidate Cache
-        (0, novelController_1.invalidateNovelCache)();
+        // Invalidate Cache
+        await (0, novelController_1.invalidateNovelCache)();
         res.json({
             success: true,
             data: novel,
@@ -248,14 +297,27 @@ const updateNovel = async (req, res) => {
 exports.updateNovel = updateNovel;
 const deleteNovel = async (req, res) => {
     try {
+        const id = String(req.params.id);
+        const existing = await prisma_1.prisma.novel.findUnique({ where: { id } });
+        if (!existing) {
+            res.status(404).json({ message: 'Novel not found' });
+            return;
+        }
+        // Ownership Check
+        if (req.user?.role !== 'SUPER_ADMIN' && existing.createdById !== req.user?.userId) {
+            res.status(403).json({ message: 'You do not have permission to delete this novel' });
+            return;
+        }
         await prisma_1.prisma.novel.update({
-            where: { id: String(req.params.id) },
+            where: { id },
             data: {
                 status: 'DELETED',
                 // @ts-ignore
                 deletedAt: new Date()
             }
         });
+        await (0, novelController_1.invalidateNovelCache)();
+        await (0, novelController_1.invalidateChapterCache)(String(req.params.id));
         res.status(200).json({ message: 'Novel deleted successfully' });
     }
     catch (err) {
@@ -331,7 +393,7 @@ const createChapter = async (req, res) => {
         const { title, name, content, chapter_number, order, thumbnail, thumbnailUrl } = req.body;
         // Map frontend fields (chapter_number, thumbnail, title/name)
         const finalOrder = order !== undefined ? order : (chapter_number !== undefined ? chapter_number : 1);
-        const finalThumbnailUrl = thumbnailUrl || thumbnail || '';
+        const finalThumbnailUrl = await imageService_1.ImageService.processImage(thumbnailUrl || thumbnail || '');
         const finalTitle = title || name || `Chapter ${finalOrder}`;
         // Safeguard: Prevent operations on legacy numeric IDs that crash Prisma
         if (novelId && ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].includes(String(novelId))) {
@@ -342,9 +404,13 @@ const createChapter = async (req, res) => {
             data: {
                 novelId,
                 title: finalTitle,
+                titleEn: (req.body.titleEn || req.body.title_en || undefined),
                 content: content || '',
+                contentEn: (req.body.contentEn || req.body.content_en || undefined), // Add English content
                 order: finalOrder,
-                thumbnailUrl: finalThumbnailUrl
+                thumbnailUrl: finalThumbnailUrl,
+                isTranslating: !!(req.body.contentEn || req.body.content_en) ? false : undefined,
+                createdById: req.user?.userId
             }
         });
         res.status(201).json({
@@ -352,6 +418,8 @@ const createChapter = async (req, res) => {
             data: chapter,
             message: 'Chapter created successfully'
         });
+        // Invalidate Cache
+        await (0, novelController_1.invalidateChapterCache)(novelId);
     }
     catch (error) {
         console.error('--- Admin Create Chapter ERROR ---');
@@ -371,13 +439,31 @@ const updateChapter = async (req, res) => {
         const { title, name, content, chapter_number, order, thumbnail, thumbnailUrl } = req.body;
         // Map frontend fields
         const finalOrder = order !== undefined ? order : (chapter_number !== undefined ? chapter_number : undefined);
-        const finalThumbnailUrl = thumbnailUrl || thumbnail;
+        const finalThumbnailUrl = await imageService_1.ImageService.processImage(thumbnailUrl || thumbnail);
         const finalTitle = title || name;
+        const existing = await prisma_1.prisma.chapter.findUnique({ where: { id } });
+        if (!existing) {
+            res.status(404).json({ message: 'Chapter not found' });
+            return;
+        }
+        // Ownership Check
+        if (req.user?.role !== 'SUPER_ADMIN' && existing.createdById !== req.user?.userId) {
+            res.status(403).json({ message: 'You do not have permission to edit this chapter' });
+            return;
+        }
+        const finalTitleEn = req.body.titleEn || req.body.title_en;
+        const finalContentEn = req.body.contentEn || req.body.content_en;
         const data = {};
         if (finalTitle)
             data.title = finalTitle;
+        if (finalTitleEn)
+            data.titleEn = finalTitleEn;
         if (content !== undefined)
             data.content = content;
+        if (finalContentEn !== undefined) {
+            data.contentEn = finalContentEn;
+            data.isTranslating = false; // Force false if content provided
+        }
         if (finalOrder !== undefined)
             data.order = finalOrder;
         if (finalThumbnailUrl !== undefined)
@@ -391,6 +477,8 @@ const updateChapter = async (req, res) => {
             data: chapter,
             message: 'Chapter updated successfully'
         });
+        // Invalidate Cache
+        await (0, novelController_1.invalidateChapterCache)(chapter.novelId);
     }
     catch (error) {
         console.error('Update chapter error:', error);
@@ -406,17 +494,24 @@ const deleteChapter = async (req, res) => {
             res.status(404).json({ message: 'Chapter not found' });
             return;
         }
-        // Manual Cascade Delete (Sequential - No Transaction)
-        // 1. Delete Dependencies
-        await prisma_1.prisma.comment.deleteMany({ where: { chapterId: id } });
-        await prisma_1.prisma.like.deleteMany({ where: { chapterId: id } });
-        await prisma_1.prisma.readingProgress.deleteMany({ where: { chapterId: id } });
-        // 2. Delete Chapter
-        await prisma_1.prisma.chapter.delete({ where: { id } });
+        // Ownership Check
+        if (req.user?.role !== 'SUPER_ADMIN' && existing.createdById !== req.user?.userId) {
+            res.status(403).json({ message: 'You do not have permission to delete this chapter' });
+            return;
+        }
+        // Transaction (Atomic Delete)
+        await prisma_1.prisma.$transaction([
+            prisma_1.prisma.comment.deleteMany({ where: { chapterId: id } }),
+            prisma_1.prisma.like.deleteMany({ where: { chapterId: id } }),
+            prisma_1.prisma.readingProgress.deleteMany({ where: { chapterId: id } }),
+            prisma_1.prisma.chapter.delete({ where: { id } })
+        ]);
         res.json({
             success: true,
             message: 'Chapter deleted successfully'
         });
+        // Invalidate Cache
+        await (0, novelController_1.invalidateChapterCache)(existing.novelId);
     }
     catch (error) {
         console.error("ADMIN DELETE CHAPTER ERROR:", error);
@@ -518,60 +613,23 @@ const translateContent = async (req, res) => {
     }
 };
 exports.translateContent = translateContent;
+// DEBUG TOOLS REMOVED FOR PRODUCTION SECURITY
 // ============================================
-// DEBUG TOOLS (Temporary)
+// ACTIVITY LOG MANAGEMENT
 // ============================================
-const listAllDebug = async (req, res) => {
+const deleteActivityLog = async (req, res) => {
     try {
-        const novels = await prisma_1.prisma.novel.findMany({ select: { id: true, title: true, status: true, authorId: true } });
-        res.json({ count: novels.length, novels });
+        const { id } = req.params;
+        await prisma_1.prisma.activityLog.delete({
+            where: { id }
+        });
+        res.json({
+            success: true,
+            message: 'Activity log deleted successfully'
+        });
     }
-    catch (e) {
-        res.status(500).json({ error: e.message });
+    catch (error) {
+        res.status(500).json({ message: 'Error deleting activity log', error });
     }
 };
-exports.listAllDebug = listAllDebug;
-const forceDeleteDebug = async (req, res) => {
-    const { id } = req.params;
-    const logs = [];
-    const log = (msg) => logs.push(msg);
-    try {
-        log(`Starting Force Delete for ${id}`);
-        // 1. Reading Progress
-        const rp = await prisma_1.prisma.readingProgress.deleteMany({ where: { novelId: id } });
-        log(`Deleted ${rp.count} ReadingProgress records`);
-        // 2. Bookmarks
-        const bk = await prisma_1.prisma.bookmark.deleteMany({ where: { novelId: id } });
-        log(`Deleted ${bk.count} Bookmarks`);
-        // 3. Novel Likes
-        const nl = await prisma_1.prisma.novelLike.deleteMany({ where: { novelId: id } });
-        log(`Deleted ${nl.count} NovelLikes`);
-        // 4. Get Chapters
-        const chapters = await prisma_1.prisma.chapter.findMany({ where: { novelId: id }, select: { id: true } });
-        log(`Found ${chapters.length} chapters`);
-        const chIds = chapters.map(c => c.id);
-        if (chIds.length > 0) {
-            // 5. Chapter Children
-            const cm = await prisma_1.prisma.comment.deleteMany({ where: { chapterId: { in: chIds } } });
-            log(`Deleted ${cm.count} Comments`);
-            const cl = await prisma_1.prisma.like.deleteMany({ where: { chapterId: { in: chIds } } });
-            log(`Deleted ${cl.count} ChapterLikes`);
-            // Extra safety for ReadingProgress by chapter if any stray ones exist
-            const rpCh = await prisma_1.prisma.readingProgress.deleteMany({ where: { chapterId: { in: chIds } } });
-            log(`Deleted ${rpCh.count} stray ReadingProgress by Chapter`);
-            // 6. Delete Chapters
-            const chDel = await prisma_1.prisma.chapter.deleteMany({ where: { novelId: id } });
-            log(`Deleted ${chDel.count} Chapters`);
-        }
-        // 7. Delete Novel
-        const nDel = await prisma_1.prisma.novel.delete({ where: { id } });
-        log(`Deleted Novel: ${nDel.title}`);
-        (0, novelController_1.invalidateNovelCache)();
-        res.json({ success: true, logs });
-    }
-    catch (e) {
-        log(`ERROR: ${e.message}`);
-        res.status(500).json({ success: false, logs, error: e.message });
-    }
-};
-exports.forceDeleteDebug = forceDeleteDebug;
+exports.deleteActivityLog = deleteActivityLog;
