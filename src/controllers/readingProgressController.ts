@@ -118,6 +118,7 @@ export const getReadingProgress = async (req: AuthRequest, res: Response): Promi
             id: true,
             title: true,
             titleEn: true, 
+            deletedAt: true,
             coverImageUrl: true,
             author: { select: { name: true } },
             _count: {
@@ -131,7 +132,7 @@ export const getReadingProgress = async (req: AuthRequest, res: Response): Promi
     // Format for frontend ReadingProgressContext & Dashboard
     const formattedProgress = {
       ongoing: allProgress
-        .filter(p => p.novel && p.chapter) // Filter out orphaned records
+        .filter(p => p.novel && !p.novel.deletedAt && p.chapter) // Filter out orphaned records and soft-deleted novels
         .map(p => ({
         novelId: p.novelId,
         novelTitle: p.novel.title,
