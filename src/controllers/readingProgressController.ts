@@ -130,7 +130,9 @@ export const getReadingProgress = async (req: AuthRequest, res: Response): Promi
 
     // Format for frontend ReadingProgressContext & Dashboard
     const formattedProgress = {
-      ongoing: allProgress.map(p => ({
+      ongoing: allProgress
+        .filter(p => p.novel && p.chapter) // Filter out orphaned records
+        .map(p => ({
         novelId: p.novelId,
         novelTitle: p.novel.title,
         novelTitleEn: p.novel.titleEn || undefined,
