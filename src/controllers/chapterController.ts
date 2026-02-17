@@ -297,6 +297,12 @@ export const incrementChapterView = async (req: Request, res: Response) => {
       prisma.chapterView.create({
         data: { chapterId, userId, ip }
       }).catch(console.error);
+
+      // 4️⃣ Sync to DB Chapter Counter
+      prisma.chapter.update({
+        where: { id: chapterId },
+        data: { views: { increment: 1 } }
+      }).catch(err => console.error('Error syncing chapter view to DB:', err));
     }
 
     return res.status(204).end();

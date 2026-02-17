@@ -553,6 +553,13 @@ export const incrementNovelView = async (req: Request, res: Response) => {
   try {
     // Increment in Redis only
     await incrementViewCount('novel', id);
+    
+    // Sync to DB (Fire and forget to not block response)
+    prisma.novel.update({
+      where: { id },
+      data: { views: { increment: 1 } }
+    }).catch(err => console.error('Error syncing novel view to DB:', err));
+
     return res.status(204).end();
   } catch (error) {
     console.error("INCREMENT NOVEL VIEW ERROR:", error);
